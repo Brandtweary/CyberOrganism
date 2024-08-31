@@ -50,7 +50,7 @@ class Organism:
         self.epsilon_decay: float = 0.995  # Decay rate for epsilon
         self.movement_speed: float = 1.0
         self.attention_speed: float = 5.0  # 5x faster than movement_speed
-        self.detection_radius: int = 200
+        self.detection_radius: int = 100
         self.consumption_range: int = 3
         self.max_nearest_items: int = 1
         self.nearest_item_params: int = 3
