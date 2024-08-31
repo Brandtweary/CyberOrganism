@@ -1,3 +1,6 @@
+# Personal files
+*.txt
+
 # Python virtual environment
 .venv/
 
