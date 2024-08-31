@@ -103,7 +103,12 @@ class Organism:
         for param in self.input_parameters:
             state.append(getattr(self, param))
 
-        nearest_items = self.matrika.get_nearest_items(organism_x, organism_y, self.max_nearest_items, item_type='food')
+        nearest_items = self.matrika.get_nearest_items(
+            organism_x, organism_y, 
+            self.max_nearest_items, 
+            self.detection_radius,
+            item_type='food'
+        )
 
         # Process nearest items
         for item in nearest_items:

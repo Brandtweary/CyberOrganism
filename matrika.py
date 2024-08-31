@@ -398,7 +398,7 @@ class Matrika:
         
         return new_organism
 
-    def get_nearest_items(self, x, y, num_items, item_type=None):
+    def get_nearest_items(self, x, y, num_items, detection_radius, item_type=None):
         item_class_map = {
             'food': Food
         }
@@ -408,9 +408,14 @@ class Matrika:
         else:
             filtered_items = self.items
         
-        sorted_items = sorted(filtered_items, key=lambda item: self.calculate_distance(x, y, 
-                              self.current_state['items'][str(item.id)]['x'], 
-                              self.current_state['items'][str(item.id)]['y']))
+        sorted_items = sorted(
+            [item for item in filtered_items if self.calculate_distance(x, y, 
+             self.current_state['items'][str(item.id)]['x'], 
+             self.current_state['items'][str(item.id)]['y']) <= detection_radius],
+            key=lambda item: self.calculate_distance(x, y, 
+                             self.current_state['items'][str(item.id)]['x'], 
+                             self.current_state['items'][str(item.id)]['y'])
+        )
         return sorted_items[:num_items]
 
     def calculate_angle(self, x1, y1, x2, y2):
