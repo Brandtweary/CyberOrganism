@@ -87,6 +87,50 @@ class SimulationState:
             self.frame_count = 0
             self.last_fps_calc_time = current_time
 
+    def generate_simulation_statistics(self):
+        stats = []
+        
+        # Input and display parameters
+        for param_dict in [self.input_parameters, self.display_parameters]:
+            for param, value in param_dict.items():
+                formatted_name = self.format_parameter_name(param)
+                formatted_value = f"{value:.3f}" if isinstance(value, float) else value
+                stats.append(f"{formatted_name}: {formatted_value}")
+        
+        # Performance data
+        stats.extend([
+            f"CPU Usage: {self.cpu_usage:.1f}%",
+            f"Memory Usage: {self.memory_usage:.1f}%",
+            f"Available Memory: {self.available_memory:.1f} MB",
+            f"Update FPS: {self.update_fps:.1f}",
+            f"Simulation Time: {int(self.total_time)} seconds",
+        ])
+        
+        return stats
+
+    def generate_training_statistics(self):
+        stats = []
+        for stat_type, stat_info in self.training_record_stats.items():
+            if stat_info['record']:
+                stats.append(f"{stat_type}:")
+                for stat_name in stat_info['stat_names']:
+                    if stat_name in self.training_stats:
+                        values = self.training_stats[stat_name]
+                        if values:
+                            value = values[-1]
+                            formatted_value = f"{value:.3f}" if isinstance(value, float) else value
+                            stats.append(f"  {stat_name}: {formatted_value}")
+        return stats
+
+    @staticmethod
+    def format_parameter_name(name):
+        if name is None:
+            return "None"
+        try:
+            return ' '.join(word.capitalize() for word in str(name).split('_'))
+        except AttributeError:
+            return str(name)
+
 def main():
     pygame.init()
     
@@ -155,7 +199,7 @@ def run_simulation(screen, clock, font, sim_state):
 
         current_time = time.time()
         if current_time - last_print_time >= 10:
-            print_biomarkers(sim_state, clock.get_fps())
+            print_simulation_stats(sim_state, clock.get_fps())
             
             avg_update_time = sum(update_times) / len(update_times)
             avg_draw_time = sum(draw_times) / len(draw_times)
@@ -186,7 +230,7 @@ def draw_simulation(screen, sim_state, font, clock):
     draw_items(screen, sim_state)
     draw_attention_points(screen, sim_state)
     draw_organisms(screen, sim_state)
-    display_biomarkers(screen, font, clock, sim_state)
+    display_simulation_stats(screen, font, clock, sim_state)
 
 def draw_items(screen, sim_state):
     for item_id, item in sim_state.current_state['items'].items():
@@ -222,73 +266,29 @@ def draw_organisms(screen, sim_state):
             pygame.draw.rect(screen, sim_state.matrika.NEON_GREEN, rect)
 
 
-def format_biomarker_name(name):
-    if name is None:
-        return "None"
-    try:
-        return ' '.join(word.capitalize() for word in str(name).split('_'))
-    except AttributeError:
-        return str(name)
-
-def display_biomarkers(screen, font, clock, sim_state):
-    """
-    Display input parameters, display parameters, and performance data on the screen.
-    """
-    # Prepare parameter text
-    parameter_text = []
-    for param, value in sim_state.input_parameters.items():
-        formatted_name = format_biomarker_name(param)
-        parameter_text.append(f"{formatted_name}: {value}")
+def display_simulation_stats(screen, font, clock, sim_state):
+    simulation_stats = sim_state.generate_simulation_statistics()
+    simulation_stats.append(f"Display FPS: {clock.get_fps():.1f}")
     
-    for param, value in sim_state.display_parameters.items():
-        formatted_name = format_biomarker_name(param)
-        parameter_text.append(f"{formatted_name}: {value}")
-
-    # Prepare performance text
-    performance_text = [
-        f"CPU Usage: {sim_state.cpu_usage}%",
-        f"Memory Usage: {sim_state.memory_usage}%",
-        f"Available Memory: {sim_state.available_memory:.1f} MB",
-        f"Display FPS: {clock.get_fps():.1f}",
-        f"Update FPS: {sim_state.update_fps:.1f}",
-        f"Simulation Time: {int(sim_state.total_time)} seconds",
-    ]
-
-    # Combine parameter and performance text
-    all_text = parameter_text + [""] + performance_text
-
-    # Render and display text
     text_y = 10
-    for text in all_text:
+    for text in simulation_stats:
         text_surface = font.render(text, True, sim_state.matrika.NEON_GREEN, sim_state.matrika.BLACK)
         text_rect = text_surface.get_rect()
         text_rect.topright = (sim_state.matrika.SCREEN_WIDTH - 10, text_y)
         screen.blit(text_surface, text_rect)
         text_y += 30
 
-def print_biomarkers(sim_state, display_fps):
-    print("\n--- Parameters ---")
-    
-    for name, value in sim_state.input_parameters.items():
-        formatted_name = format_biomarker_name(name)
-        print(f"{formatted_name}: {value}")
-    
-    for name, value in sim_state.display_parameters.items():
-        formatted_name = format_biomarker_name(name)
-        print(f"{formatted_name}: {value}")
-    
-    print("---------------------------------------")
-    
-    print("--- Performance Data ---")
-    print(f"CPU Usage: {sim_state.cpu_usage}%")
-    print(f"Memory Usage: {sim_state.memory_usage}%")
-    print(f"Available Memory: {sim_state.available_memory:.1f} MB")
-    print(f"Update FPS: {sim_state.update_fps:.1f}")
+def print_simulation_stats(sim_state, display_fps):
+    print("\n--- Simulation Statistics ---")
+    for stat in sim_state.generate_simulation_statistics():
+        print(stat)
     print(f"Display FPS: {display_fps:.1f}")
-    print(f"Simulation Time: {int(sim_state.total_time)} seconds")
     print("---------------------------------------")
 
-    print_training_statistics(sim_state)
+    print("\n--- Training Statistics ---")
+    for stat in sim_state.generate_training_statistics():
+        print(stat)
+    print("---------------------------------------")
 
 def print_final_summary(sim_state):
     print("\n=== Simulation Summary ===")
@@ -296,7 +296,6 @@ def print_final_summary(sim_state):
     print(f"Percentage of time with low loss: {(sim_state.time_low_loss / sim_state.total_time) * 100:.2f}%")
     print(f"Total simulation time: {sim_state.total_time:.2f} seconds")
     
-    # Add overall average time calculations
     if sim_state.avg_update_times:
         overall_avg_update_time = sum(sim_state.avg_update_times) / len(sim_state.avg_update_times)
         overall_avg_draw_time = sum(sim_state.avg_draw_times) / len(sim_state.avg_draw_times)
@@ -307,23 +306,9 @@ def print_final_summary(sim_state):
         print(f"  Draw time: {overall_avg_draw_time*1000:.2f}ms")
         print(f"  Total frame time: {overall_avg_total_frame_time*1000:.2f}ms")
     
-    print_training_statistics(sim_state)
-
-def print_training_statistics(sim_state):
-    if any(stat_info['record'] for stat_info in sim_state.training_record_stats.values()):
-        print("\nTraining Statistics:")
-        for stat_type, stat_info in sim_state.training_record_stats.items():
-            if stat_info['record']:
-                print(f"  {stat_type}:")
-                for stat_name in stat_info['stat_names']:
-                    if stat_name in sim_state.training_stats:
-                        values = sim_state.training_stats[stat_name]
-                        if values:
-                            value = values[-1]
-                            if isinstance(value, (int, float)):
-                                print(f"    {stat_name}: {value:.4f}")
-                            else:
-                                print(f"    {stat_name}: {value}")
+    print("\n--- Training Statistics ---")
+    for stat in sim_state.generate_training_statistics():
+        print(stat)
 
 def handle_events():
     for event in pygame.event.get():

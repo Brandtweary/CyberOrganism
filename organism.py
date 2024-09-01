@@ -247,11 +247,8 @@ class Organism:
             
             distance_improvement = old_distance - new_distance
             
-            # Reward based on distance improvement
-            if distance_improvement > 0:
-                reward = 0.5 * math.log1p(distance_improvement * 100)  # log1p(x) = log(1 + x)
-            else:
-                reward = -0.1  # Small penalty for moving away from the nearest item
+            # Reward based on distance improvement (positive or negative)
+            reward = 0.5 * math.copysign(math.log1p(abs(distance_improvement) * 100), distance_improvement)
         else:
             reward = 0  # No reward if there's no nearest item
         

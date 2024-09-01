@@ -198,7 +198,13 @@ class Matrika:
                 state['organisms'][org_id]['y'] = new_y
         
         if 'attention_point' in state_change_dict:
-            state['organisms'][org_id]['attention_point'] = state_change_dict['attention_point']
+            new_attention_point = state_change_dict['attention_point']
+            if self.is_point_within_visible_cells(new_attention_point):
+                state['organisms'][org_id]['attention_point'] = new_attention_point
+            else:
+                # If the new attention point is outside the visible cells,
+                # we keep the current attention point or set it to the organism's position
+                state['organisms'][org_id]['attention_point'] = org_state.get('attention_point', (org_state['x'], org_state['y']))
         
         if 'nearest_item_id' in state_change_dict:
             state['organisms'][org_id]['nearest_item_id'] = state_change_dict['nearest_item_id']
@@ -208,6 +214,9 @@ class Matrika:
         
         if state_change_dict.get('spawn', False):
             self.spawn_organism(organism)
+
+    def is_point_within_visible_cells(self, point):
+        return point in self.visible_cells
 
     def handle_collision(self, x, y, state, organism):
         for item_id, item_state in state['items'].items():
@@ -421,7 +430,7 @@ class Matrika:
         )
         
         if return_IDs:
-            return [item.id for item in sorted_items[:num_items]]
+            return [str(item.id) for item in sorted_items[:num_items]]
         else:
             return sorted_items[:num_items]
 
