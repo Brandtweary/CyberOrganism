@@ -18,7 +18,7 @@ class Matrika:
         self.SCREEN_HEIGHT = 1080
         self.FPS = 60
         self.UPDATE_INTERVAL = 1.0 / 30
-        self.CAMERA_PAN_SPEED = 800
+        self.CAMERA_PAN_SPEED = 200
         self.MAX_FOOD_ITEMS = 12
         self.collision_range = 2  # Add collision range parameter
 
@@ -428,29 +428,21 @@ class Matrika:
         return int(screen_x), int(screen_y)
 
     def handle_camera_panning(self):
-        current_time = time.time()
-        elapsed_time = current_time - self.last_pan_time
-        
-        if elapsed_time >= 1 / self.FPS:
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            pan_speed = self.CAMERA_PAN_SPEED * elapsed_time
-            
-            dx = dy = 0
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        dx = dy = 0
 
-            if mouse_x <= 10:
-                dx = -pan_speed
-            elif mouse_x >= self.SCREEN_WIDTH - 10:
-                dx = pan_speed
+        if mouse_x <= 10:
+            dx = -self.CAMERA_PAN_SPEED / self.FPS
+        elif mouse_x >= self.SCREEN_WIDTH - 10:
+            dx = self.CAMERA_PAN_SPEED / self.FPS
 
-            if mouse_y <= 10:
-                dy = -pan_speed
-            elif mouse_y >= self.SCREEN_HEIGHT - 10:
-                dy = pan_speed
+        if mouse_y <= 10:
+            dy = -self.CAMERA_PAN_SPEED / self.FPS
+        elif mouse_y >= self.SCREEN_HEIGHT - 10:
+            dy = self.CAMERA_PAN_SPEED / self.FPS
 
-            if dx != 0 or dy != 0:
-                self.update_viewport(dx, dy)
-
-            self.last_pan_time = current_time
+        if dx != 0 or dy != 0:
+            self.update_viewport(dx, dy)
 
     def calculate_organism_speed(self, organism):
         return organism.movement_speed * self.simulation_fps
