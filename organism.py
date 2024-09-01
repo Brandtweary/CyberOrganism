@@ -9,6 +9,7 @@ import copy
 from typing import Dict, Any, Tuple, Callable, List, Optional
 import numpy as np
 from uuid import UUID, uuid4
+from state_view import StateView
 
 class DQNNetwork(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
@@ -93,7 +94,7 @@ class Organism:
                                         lr=parent.optimizer.param_groups[0]['lr'])
         self.training_stats = TrainingStatistics(self.dqn, self.optimizer)
 
-    def get_internal_state(self, external_state: Dict[str, Any]) -> Tuple[torch.Tensor, List[Optional[UUID]]]:
+    def get_internal_state(self, external_state: StateView) -> Tuple[torch.Tensor, List[Optional[UUID]]]:
         organism_state = external_state['organisms'][str(self.id)]
         organism_x, organism_y = organism_state['x'], organism_state['y']
         
@@ -156,7 +157,7 @@ class Organism:
 
         return action
 
-    def update_attention_point(self, action: int) -> None:
+    def update_attention_point(self, action: int) -> Tuple[float, float]:
         dx, dy = 0, 0
         if action == 0:  # Move up
             dy = -self.attention_move_distance
@@ -167,15 +168,19 @@ class Organism:
         elif action == 3:  # Move right
             dx = self.attention_move_distance
 
-        self.attention_x += dx * self.attention_speed
-        self.attention_y += dy * self.attention_speed
+        return dx * self.attention_speed, dy * self.attention_speed
 
-    def move(self, external_state: Dict[str, Any]) -> Tuple[float, float]:
+    def move(self, external_state: StateView, attention_vector: Tuple[float, float]) -> Tuple[float, float]:
         org_state = external_state['organisms'][str(self.id)]
         org_x, org_y = org_state['x'], org_state['y']
+        current_attention_x, current_attention_y = org_state['attention_point']
         
-        dx = self.attention_x - org_x
-        dy = self.attention_y - org_y
+        # Calculate theoretical new attention point
+        theoretical_attention_x = current_attention_x + attention_vector[0]
+        theoretical_attention_y = current_attention_y + attention_vector[1]
+        
+        dx = theoretical_attention_x - org_x
+        dy = theoretical_attention_y - org_y
         distance = math.sqrt(dx**2 + dy**2)
         
         if distance > 0:
@@ -191,7 +196,7 @@ class Organism:
         else:
             return 0, 0
 
-    def update_state(self, external_state: Dict[str, Any]) -> Dict[str, Any]:
+    def update_state(self, external_state: StateView) -> Dict[str, Any]:
         """
         Update the organism's state based on the current external state.
         
@@ -200,19 +205,19 @@ class Organism:
         other methods to perform specific tasks.
         
         Args:
-            external_state (Dict[str, Any]): The current external state of the environment.
+            external_state (StateView): The current external state of the environment.
         
         Returns:
             Dict[str, Any]: A dictionary containing the changes to be applied to the external state.
         """
         internal_state, nearest_item_ids = self.get_internal_state(external_state)
         action = self.select_attention_move(internal_state)
-        self.update_attention_point(action)
-        move_x, move_y = self.move(external_state)
+        attention_vector = self.update_attention_point(action)
+        move_x, move_y = self.move(external_state, attention_vector)
         
         external_state_change = {
             'movement_vector': (move_x, move_y),
-            'attention_point': (self.attention_x, self.attention_y),
+            'attention_vector': attention_vector,
             'nearest_item_id': nearest_item_ids[0] if nearest_item_ids else None
         }
         
@@ -230,7 +235,7 @@ class Organism:
         
         return external_state_change
 
-    def calculate_rewards(self, old_state: Dict[str, Any], new_state: Dict[str, Any]) -> float:
+    def calculate_rewards(self, old_state: StateView, new_state: StateView) -> float:
         old_organism_state = old_state['organisms'][str(self.id)]
         new_organism_state = new_state['organisms'][str(self.id)]
         
@@ -262,7 +267,7 @@ class Organism:
         
         return reward
 
-    def apply_state(self, old_state: Dict[str, Any], new_state: Dict[str, Any]) -> None:
+    def apply_state(self, old_state: StateView, new_state: StateView) -> None:
         total_reward = self.calculate_rewards(old_state, new_state)
         new_internal_state, _ = self.get_internal_state(new_state)  # Unpack the tuple
         

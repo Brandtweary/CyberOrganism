@@ -7,7 +7,7 @@ import uuid
 from items import Food
 from food_spawners import FoodSpawner
 from collections import deque
-from immutable_state_view import ImmutableStateView
+from state_view import StateView
 
 class Matrika:
     def __init__(self):
@@ -26,20 +26,22 @@ class Matrika:
         self.RED = (255, 0, 0)
         self.BLUE = (0, 0, 255)
 
+        self.world_width = self.GRID_SIZE
+        self.world_height = self.GRID_SIZE
+        
         self.viewport_width = self.SCREEN_WIDTH // self.CELL_SIZE
         self.viewport_height = self.SCREEN_HEIGHT // self.CELL_SIZE
         
-        # Center the viewport
-        self.viewport_x = (self.GRID_SIZE - self.viewport_width) // 2
-        self.viewport_y = (self.GRID_SIZE - self.viewport_height) // 2
+        # Center of the viewport in world coordinates
+        self.viewport_center_x = self.world_width // 2
+        self.viewport_center_y = self.world_height // 2
         
-        self.prev_viewport_x = self.viewport_x
-        self.prev_viewport_y = self.viewport_y
         self.last_viewport_update_time = time.time()
         self.last_pan_time = time.time()
         
         self.state_history = deque(maxlen=100)  # Adjust maxlen as needed
         self.current_state = self.create_state_snapshot()
+        self.state_view = StateView(self.current_state, mutable=True)
 
         self.food_spawners = []
         self.items = []
@@ -47,16 +49,16 @@ class Matrika:
         self.test_organism = None
         self.visible_cells = []
 
-        # Now initialize food spawners after centering the viewport
+        self.update_visible_cells()
         self.initialize_food_spawners()
 
     def initialize_food_spawners(self):
         margin = 15  # Cells inward from the corners
         spawner_positions = [
-            (self.viewport_x + margin, self.viewport_y + margin),
-            (self.viewport_x + self.viewport_width - margin, self.viewport_y + margin),
-            (self.viewport_x + margin, self.viewport_y + self.viewport_height - margin),
-            (self.viewport_x + self.viewport_width - margin, self.viewport_y + self.viewport_height - margin)
+            (self.viewport_center_x - self.viewport_width // 2 + margin, self.viewport_center_y - self.viewport_height // 2 + margin),
+            (self.viewport_center_x + self.viewport_width // 2 - margin, self.viewport_center_y - self.viewport_height // 2 + margin),
+            (self.viewport_center_x - self.viewport_width // 2 + margin, self.viewport_center_y + self.viewport_height // 2 - margin),
+            (self.viewport_center_x + self.viewport_width // 2 - margin, self.viewport_center_y + self.viewport_height // 2 - margin)
         ]
 
         regular_food_params = {
@@ -83,7 +85,7 @@ class Matrika:
         spawner = FoodSpawner(spawn_frequency, regular_food_params, high_energy_food_params, spawn_range, entropy, matrika=self)
         self.food_spawners.append(spawner)
         # Add the new spawner to the current state
-        self.current_state['food_spawners'][str(spawner.id)] = {
+        self.state_view['food_spawners'][str(spawner.id)] = {
             'x': x,
             'y': y,
             'marked_for_deletion': False
@@ -94,7 +96,7 @@ class Matrika:
             new_item = item_class(**kwargs)
             self.items.append(new_item)
             # Add the new item to the current state
-            self.current_state['items'][str(new_item.id)] = {
+            self.state_view['items'][str(new_item.id)] = {
                 'x': x,
                 'y': y,
                 'type': type(new_item).__name__,
@@ -114,7 +116,7 @@ class Matrika:
             new_organism = organism_class(self, (x, y))  # Pass self (Matrika instance) and initial position
             self.organisms.append(new_organism)
             # Add the new organism to the current state
-            self.current_state['organisms'][str(new_organism.id)] = {
+            self.state_view['organisms'][str(new_organism.id)] = {
                 'x': x,
                 'y': y,
                 'marked_for_deletion': False,
@@ -127,10 +129,10 @@ class Matrika:
     def is_cell_empty(self, x, y):
         return not any(
             (item_state['x'] == x and item_state['y'] == y and not item_state.get('marked_for_deletion', False))
-            for item_state in self.current_state['items'].values()
+            for item_state in self.state_view['items'].values()
         ) and not any(
             (org_state['x'] == x and org_state['y'] == y and not org_state.get('marked_for_deletion', False))
-            for org_state in self.current_state['organisms'].values()
+            for org_state in self.state_view['organisms'].values()
         )
 
     def find_empty_random_cell_near(self, x, y, max_attempts=10):
@@ -144,20 +146,25 @@ class Matrika:
         return None
 
     def update_viewport(self, dx=0, dy=0):
-        self.prev_viewport_x = self.viewport_x
-        self.prev_viewport_y = self.viewport_y
-        
-        self.viewport_x += dx
-        self.viewport_y += dy
+        self.viewport_center_x = max(self.viewport_width // 2, 
+                                     min(self.viewport_center_x + dx, 
+                                         self.world_width - self.viewport_width // 2))
+        self.viewport_center_y = max(self.viewport_height // 2, 
+                                     min(self.viewport_center_y + dy, 
+                                         self.world_height - self.viewport_height // 2))
         
         self.last_viewport_update_time = time.time()
         self.update_visible_cells()
 
     def update_visible_cells(self):
         self.visible_cells = []
-        for x in range(int(self.viewport_x), int(self.viewport_x + self.viewport_width) + 1):
-            for y in range(int(self.viewport_y), int(self.viewport_y + self.viewport_height) + 1):
-                if 0 <= x < self.GRID_SIZE and 0 <= y < self.GRID_SIZE:
+        
+        viewport_left = self.viewport_center_x - self.viewport_width // 2
+        viewport_top = self.viewport_center_y - self.viewport_height // 2
+        
+        for x in range(viewport_left, viewport_left + self.viewport_width):
+            for y in range(viewport_top, viewport_top + self.viewport_height):
+                if 0 <= x < self.world_width and 0 <= y < self.world_height:
                     self.visible_cells.append((x, y))
 
     def get_random_visible_cell(self):
@@ -165,21 +172,35 @@ class Matrika:
             return None
         return random.choice(self.visible_cells)
 
-    def update_all_organisms(self, state):
-        for org_id, org_state in list(state['organisms'].items()):
+    def update_simulation(self):
+        self.state_view.set_mutable(True)
+        
+        self.state_view['time'] = time.time()
+        
+        self.update_all_organisms()
+        self.update_expiration_timers()
+        self.update_food_spawners()
+        
+        self.state_view.set_mutable(False)
+        self.apply_simulation_state()
+        self.state_history.append(self.current_state.copy())  # Shallow copy is sufficient here
+        self.current_state = self.create_state_snapshot()
+        self.state_view = StateView(self.current_state, mutable=True)
+
+    def update_all_organisms(self):
+        for org_id, org_state in list(self.state_view['organisms'].items()):
             if org_state.get('marked_for_deletion', False):
                 continue
             
             organism = next(org for org in self.organisms if str(org.id) == org_id)
             
-            immutable_state = ImmutableStateView(state)
-            state_change_dict = organism.update_state(immutable_state)
+            self.state_view.set_mutable(False)
+            state_change_dict = organism.update_state(self.state_view)
+            self.state_view.set_mutable(True)
             
-            self.process_external_state_change(state, org_id, org_state, state_change_dict, organism)
-        
-        return state
+            self.process_external_state_change(org_id, org_state, state_change_dict, organism)
 
-    def process_external_state_change(self, state, org_id, org_state, state_change_dict, organism):
+    def process_external_state_change(self, org_id, org_state, state_change_dict, organism):
         if 'movement_vector' in state_change_dict:
             new_x, new_y = self.calculate_new_position(
                 org_state['x'], 
@@ -187,45 +208,54 @@ class Matrika:
                 state_change_dict['movement_vector']
             )
             
-            collision_object = self.handle_collision(new_x, new_y, state, organism)
+            collision_object = self.handle_collision(new_x, new_y, organism)
             if collision_object is None:
-                state['organisms'][org_id]['x'] = new_x
-                state['organisms'][org_id]['y'] = new_y
+                self.state_view['organisms'][org_id]['x'] = new_x
+                self.state_view['organisms'][org_id]['y'] = new_y
             elif isinstance(collision_object, Food):
                 collision_object.consume(organism)
-                state['items'][str(collision_object.id)]['marked_for_deletion'] = True
-                state['organisms'][org_id]['x'] = new_x
-                state['organisms'][org_id]['y'] = new_y
+                self.state_view['items'][str(collision_object.id)]['marked_for_deletion'] = True
+                self.state_view['organisms'][org_id]['x'] = new_x
+                self.state_view['organisms'][org_id]['y'] = new_y
         
-        if 'attention_point' in state_change_dict:
-            new_attention_point = state_change_dict['attention_point']
-            if self.is_point_within_visible_cells(new_attention_point):
-                state['organisms'][org_id]['attention_point'] = new_attention_point
+        if 'attention_vector' in state_change_dict:
+            current_attention_x, current_attention_y = org_state.get('attention_point', (org_state['x'], org_state['y']))
+            dx, dy = state_change_dict['attention_vector']
+            new_attention_x = current_attention_x + dx
+            new_attention_y = current_attention_y + dy
+            
+            if self.is_point_visible(new_attention_x, new_attention_y):
+                self.state_view['organisms'][org_id]['attention_point'] = (new_attention_x, new_attention_y)
             else:
                 # If the new attention point is outside the visible cells,
-                # we keep the current attention point or set it to the organism's position
-                state['organisms'][org_id]['attention_point'] = org_state.get('attention_point', (org_state['x'], org_state['y']))
+                # we keep the current attention point
+                self.state_view['organisms'][org_id]['attention_point'] = (current_attention_x, current_attention_y)
         
         if 'nearest_item_id' in state_change_dict:
-            state['organisms'][org_id]['nearest_item_id'] = state_change_dict['nearest_item_id']
+            self.state_view['organisms'][org_id]['nearest_item_id'] = state_change_dict['nearest_item_id']
         
         if 'alive' in state_change_dict and not state_change_dict['alive']:
-            state['organisms'][org_id]['marked_for_deletion'] = True
+            self.state_view['organisms'][org_id]['marked_for_deletion'] = True
         
         if state_change_dict.get('spawn', False):
             self.spawn_organism(organism)
 
-    def is_point_within_visible_cells(self, point):
-        return point in self.visible_cells
+    def is_point_visible(self, x, y):
+        viewport_left = self.viewport_center_x - self.viewport_width // 2
+        viewport_top = self.viewport_center_y - self.viewport_height // 2
+        viewport_right = viewport_left + self.viewport_width
+        viewport_bottom = viewport_top + self.viewport_height
 
-    def handle_collision(self, x, y, state, organism):
-        for item_id, item_state in state['items'].items():
+        return viewport_left <= x < viewport_right and viewport_top <= y < viewport_bottom
+
+    def handle_collision(self, x, y, organism):
+        for item_id, item_state in self.state_view['items'].items():
             if item_state['x'] == x and item_state['y'] == y and not item_state.get('marked_for_deletion', False):
                 item = self.get_item_by_ID(uuid.UUID(item_id))
                 if item:
                     return item
         
-        for org_id, org_state in state['organisms'].items():
+        for org_id, org_state in self.state_view['organisms'].items():
             if org_id != str(organism.id) and org_state['x'] == x and org_state['y'] == y and not org_state.get('marked_for_deletion', False):
                 return self.get_organism_by_ID(uuid.UUID(org_id))
         
@@ -237,35 +267,33 @@ class Matrika:
         new_y = max(0, min(y + dy, self.GRID_SIZE - 1))
         return new_x, new_y
 
-    def is_position_empty(self, x, y, state):
-        for org_state in state['organisms'].values():
+    def is_position_empty(self, x, y):
+        for org_state in self.state_view['organisms'].values():
             if org_state['x'] == x and org_state['y'] == y:
                 return False
-        for item_state in state['items'].values():
+        for item_state in self.state_view['items'].values():
             if item_state['x'] == x and item_state['y'] == y:
                 return False
         return True
 
-    def update_expiration_timers(self, state):
-        for item_id, item_state in state['items'].items():
+    def update_expiration_timers(self):
+        for item_id, item_state in self.state_view['items'].items():
             if item_state.get('marked_for_deletion', False):
                 continue
             if item_state['expiration_timer'] > 0:
                 item_state['expiration_timer'] -= self.UPDATE_INTERVAL
                 if item_state['expiration_timer'] <= 0:
                     item_state['marked_for_deletion'] = True
-        return state
 
-    def update_food_spawners(self, state):
+    def update_food_spawners(self):
         current_time = time.time()
         food_count = sum(1 for item in self.items if isinstance(item, Food))
         for spawner in self.food_spawners:
-            spawner_state = state['food_spawners'][str(spawner.id)]
+            spawner_state = self.state_view['food_spawners'][str(spawner.id)]
             if food_count < self.MAX_FOOD_ITEMS and spawner.should_spawn(current_time):
                 new_food = spawner.spawn_food(spawner_state['x'], spawner_state['y'])
                 if new_food:
                     food_count += 1
-        return state
 
     def apply_simulation_state(self):
         old_state = self.state_history[-1] if self.state_history else None
@@ -291,20 +319,12 @@ class Matrika:
                 elif old_state:
                     item.apply_state(old_state, new_state)
 
-    def get_interpolated_viewport(self):
-        current_time = time.time()
-        time_since_update = current_time - self.last_viewport_update_time
-        interpolation_factor = min(time_since_update / self.UPDATE_INTERVAL, 1.0)
-        
-        interp_x = self.prev_viewport_x + (self.viewport_x - self.prev_viewport_x) * interpolation_factor
-        interp_y = self.prev_viewport_y + (self.viewport_y - self.prev_viewport_y) * interpolation_factor
-        
-        return interp_x, interp_y
-
     def grid_to_screen(self, grid_x, grid_y):
-        interp_viewport_x, interp_viewport_y = self.get_interpolated_viewport()
-        screen_x = (grid_x - interp_viewport_x) * self.CELL_SIZE
-        screen_y = (grid_y - interp_viewport_y) * self.CELL_SIZE
+        viewport_left = self.viewport_center_x - self.viewport_width // 2
+        viewport_top = self.viewport_center_y - self.viewport_height // 2
+        
+        screen_x = (grid_x - viewport_left) * self.CELL_SIZE
+        screen_y = (grid_y - viewport_top) * self.CELL_SIZE
         return int(screen_x), int(screen_y)
 
     def handle_camera_panning(self):
@@ -313,48 +333,22 @@ class Matrika:
         
         if elapsed_time >= 1 / self.FPS:
             mouse_x, mouse_y = pygame.mouse.get_pos()
-            base_pan_speed = self.CAMERA_PAN_SPEED
+            pan_speed = self.CAMERA_PAN_SPEED * elapsed_time
             
-            dx = dy = 0.0
+            dx = dy = 0
 
             if mouse_x <= 10:
-                dx = -1
+                dx = -pan_speed
             elif mouse_x >= self.SCREEN_WIDTH - 10:
-                dx = 1
+                dx = pan_speed
 
             if mouse_y <= 10:
-                dy = -1
+                dy = -pan_speed
             elif mouse_y >= self.SCREEN_HEIGHT - 10:
-                dy = 1
-
-            current_direction = (dx, dy)
-            if not hasattr(self, 'last_pan_direction') or self.last_pan_direction != current_direction:
-                self.continuous_pan_start = current_time
-                pan_speed = base_pan_speed
-            elif current_time - self.continuous_pan_start >= 0.1:
-                pan_speed = base_pan_speed * 2.0
-            else:
-                pan_speed = base_pan_speed
-
-            self.last_pan_direction = current_direction
-
-            pan_distance = pan_speed * elapsed_time
-            dx *= pan_distance
-            dy *= pan_distance
+                dy = pan_speed
 
             if dx != 0 or dy != 0:
-                new_viewport_x = self.viewport_x + dx / self.CELL_SIZE
-                new_viewport_y = self.viewport_y + dy / self.CELL_SIZE
-
-                new_viewport_x = max(0, min(new_viewport_x, self.GRID_SIZE - self.viewport_width))
-                new_viewport_y = max(0, min(new_viewport_y, self.GRID_SIZE - self.viewport_height))
-
-                actual_dx = new_viewport_x - self.viewport_x
-                actual_dy = new_viewport_y - self.viewport_y
-
-                self.update_viewport(actual_dx, actual_dy)
-            else:
-                self.continuous_pan_start = current_time
+                self.update_viewport(dx, dy)
 
             self.last_pan_time = current_time
 
@@ -362,15 +356,15 @@ class Matrika:
         if item in self.items:
             self.items.remove(item)
         item_id = str(item.id)
-        if item_id in self.current_state['items']:
-            del self.current_state['items'][item_id]
+        if item_id in self.state_view['items']:
+            del self.state_view['items'][item_id]
 
     def remove_organism(self, organism):
         if organism in self.organisms:
             self.organisms.remove(organism)
         org_id = str(organism.id)
-        if org_id in self.current_state['organisms']:
-            del self.current_state['organisms'][org_id]
+        if org_id in self.state_view['organisms']:
+            del self.state_view['organisms'][org_id]
 
     def calculate_organism_speed(self, organism):
         return organism.movement_speed * self.simulation_fps
@@ -381,21 +375,6 @@ class Matrika:
             viewport_diagonal = math.sqrt(self.viewport_width**2 + self.viewport_height**2)
             return distance / viewport_diagonal
         return distance
-
-    def update_simulation(self):
-        new_state = self.current_state.copy()
-        
-        new_state['time'] = time.time()  # Update the time at the beginning of the simulation update
-        
-        new_state = self.update_all_organisms(new_state)
-        new_state = self.update_expiration_timers(new_state)
-        new_state = self.update_food_spawners(new_state)
-        
-        self.current_state = new_state
-        self.apply_simulation_state()
-        self.state_history.append(self.current_state)
-        
-       
 
     def spawn_organism(self, parent):
         dx = random.choice([-1, 0, 1])
@@ -422,11 +401,11 @@ class Matrika:
         
         sorted_items = sorted(
             [item for item in filtered_items if self.calculate_distance(x, y, 
-             self.current_state['items'][str(item.id)]['x'], 
-             self.current_state['items'][str(item.id)]['y']) <= detection_radius],
+             self.state_view['items'][str(item.id)]['x'], 
+             self.state_view['items'][str(item.id)]['y']) <= detection_radius],
             key=lambda item: self.calculate_distance(x, y, 
-                             self.current_state['items'][str(item.id)]['x'], 
-                             self.current_state['items'][str(item.id)]['y'])
+                             self.state_view['items'][str(item.id)]['x'], 
+                             self.state_view['items'][str(item.id)]['y'])
         )
         
         if return_IDs:
