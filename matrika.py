@@ -20,6 +20,7 @@ class Matrika:
         self.UPDATE_INTERVAL = 1.0 / 30
         self.CAMERA_PAN_SPEED = 800
         self.MAX_FOOD_ITEMS = 12
+        self.collision_range = 2  # Add collision range parameter
 
         # Colors
         self.BLACK = (0, 0, 0)
@@ -183,9 +184,6 @@ class Matrika:
         self.update_expiration_timers(new_state)
         self.update_food_spawners(new_state)
 
-        # Set the new state to immutable
-        new_state.set_mutable(False)
-
         # Apply the new state
         self.apply_simulation_state(self.current_state, new_state)
 
@@ -196,25 +194,29 @@ class Matrika:
         self.current_state = new_state
 
     def apply_simulation_state(self, old_state, new_state):
-        # Update organisms
-        for organism in list(self.organisms):
-            org_id = str(organism.id)
-            new_org_state = new_state['organisms'].get(org_id)
-            if new_org_state:
-                if new_org_state.get('marked_for_deletion', False):
-                    self.remove_organism(organism)
-                else:
-                    organism.apply_state(old_state, new_state)
-
         # Update items
-        for item in list(self.items):
-            item_id = str(item.id)
-            new_item_state = new_state['items'].get(item_id)
-            if new_item_state:
-                if new_item_state.get('marked_for_deletion', False):
-                    self.remove_item(item)
-                else:
+        for item_id, item_state in list(new_state['items'].items()):
+            if item_state.get('marked_for_deletion', False):
+                del new_state['items'][item_id]
+                item = next((item for item in self.items if str(item.id) == item_id), None)
+                if item:
+                    self.items.remove(item)
+            else:
+                item = next((item for item in self.items if str(item.id) == item_id), None)
+                if item:
                     item.apply_state(old_state, new_state)
+
+        # Update organisms
+        for org_id, org_state in list(new_state['organisms'].items()):
+            if org_state.get('marked_for_deletion', False):
+                del new_state['organisms'][org_id]
+                organism = next((org for org in self.organisms if str(org.id) == org_id), None)
+                if organism:
+                    self.organisms.remove(organism)
+            else:
+                organism = next((org for org in self.organisms if str(org.id) == org_id), None)
+                if organism:
+                    organism.apply_state(old_state, new_state)
 
     def update_all_organisms(self, new_state):
         for org_id, org_state in list(new_state['organisms'].items()):
@@ -267,28 +269,38 @@ class Matrika:
                 state_change_dict['movement_vector']
             )
             
-            collision_object = self.handle_collision(new_x, new_y, organism, new_state)
-            if collision_object is None:
+            collision_objects = self.handle_collision(new_x, new_y, organism, new_state)
+            if not collision_objects:
                 new_state['organisms'][org_id]['x'] = new_x
                 new_state['organisms'][org_id]['y'] = new_y
-            elif isinstance(collision_object, Food):
-                collision_object.consume(organism)
-                new_state['items'][str(collision_object.id)]['marked_for_deletion'] = True
-                new_state['organisms'][org_id]['x'] = new_x
-                new_state['organisms'][org_id]['y'] = new_y
+            else:
+                for obj in collision_objects:
+                    if isinstance(obj, Food):
+                        obj.consume(organism)
+                        new_state['items'][str(obj.id)]['marked_for_deletion'] = True
         
         if 'attention_vector' in state_change_dict:
-            current_attention_x, current_attention_y = org_state.get('attention_point', (org_state['x'], org_state['y']))
+            current_org_x, current_org_y = org_state['x'], org_state['y']
+            current_attention_x, current_attention_y = org_state.get('attention_point', (current_org_x, current_org_y))
             dx, dy = state_change_dict['attention_vector']
             new_attention_x = current_attention_x + dx
             new_attention_y = current_attention_y + dy
             
-            if self.is_point_visible(new_attention_x, new_attention_y):
+            # Use the organism's detection radius directly
+            detection_radius = organism.detection_radius
+            
+            # Calculate the distance between the new attention point and the organism
+            distance = self.calculate_distance(current_org_x, current_org_y, new_attention_x, new_attention_y)
+            
+            if distance <= detection_radius:
                 new_state['organisms'][org_id]['attention_point'] = (new_attention_x, new_attention_y)
             else:
-                # If the new attention point is outside the visible cells,
-                # we keep the current attention point
-                new_state['organisms'][org_id]['attention_point'] = (current_attention_x, current_attention_y)
+                # If the new attention point is outside the detection radius,
+                # we constrain it to the edge of the detection radius
+                angle = self.calculate_angle(current_org_x, current_org_y, new_attention_x, new_attention_y)
+                constrained_x = current_org_x + detection_radius * math.cos(angle)
+                constrained_y = current_org_y + detection_radius * math.sin(angle)
+                new_state['organisms'][org_id]['attention_point'] = (constrained_x, constrained_y)
         
         if 'nearest_item_id' in state_change_dict:
             new_state['organisms'][org_id]['nearest_item_id'] = state_change_dict['nearest_item_id']
@@ -308,17 +320,18 @@ class Matrika:
         return viewport_left <= x < viewport_right and viewport_top <= y < viewport_bottom
 
     def handle_collision(self, x, y, organism, new_state):
+        collision_objects = []
         for item_id, item_state in new_state['items'].items():
-            if item_state['x'] == x and item_state['y'] == y and not item_state.get('marked_for_deletion', False):
-                item = self.get_item_by_ID(uuid.UUID(item_id))
+            if self.calculate_distance(x, y, item_state['x'], item_state['y']) <= self.collision_range and not item_state.get('marked_for_deletion', False):
+                item = self.get_item_by_ID(item_id)
                 if item:
-                    return item
+                    collision_objects.append(item)
         
         for org_id, org_state in new_state['organisms'].items():
-            if org_id != str(organism.id) and org_state['x'] == x and org_state['y'] == y and not org_state.get('marked_for_deletion', False):
-                return self.get_organism_by_ID(uuid.UUID(org_id))
+            if org_id != str(organism.id) and self.calculate_distance(x, y, org_state['x'], org_state['y']) <= self.collision_range and not org_state.get('marked_for_deletion', False):
+                collision_objects.append(self.get_organism_by_ID(org_id))
         
-        return None
+        return collision_objects
         
     def calculate_new_position(self, x, y, movement_vector):
         dx, dy = movement_vector
@@ -380,13 +393,17 @@ class Matrika:
     def item_exists(self, item_id):
         return any(item.id == item_id for item in self.items)
 
-    def get_item_by_ID(self, item_id: uuid.UUID):
+    def get_item_by_ID(self, item_id):
+        if isinstance(item_id, str):
+            item_id = uuid.UUID(item_id)
         for item in self.items:
             if item.id == item_id:
                 return item
         return None
 
-    def get_organism_by_ID(self, organism_id: uuid.UUID):
+    def get_organism_by_ID(self, organism_id):
+        if isinstance(organism_id, str):
+            organism_id = uuid.UUID(organism_id)
         for organism in self.organisms:
             if organism.id == organism_id:
                 return organism
@@ -434,20 +451,6 @@ class Matrika:
                 self.update_viewport(dx, dy)
 
             self.last_pan_time = current_time
-
-    def remove_item(self, item):
-        if item in self.items:
-            self.items.remove(item)
-        item_id = str(item.id)
-        if item_id in self.current_state['items']:
-            del self.current_state['items'][item_id]
-
-    def remove_organism(self, organism):
-        if organism in self.organisms:
-            self.organisms.remove(organism)
-        org_id = str(organism.id)
-        if org_id in self.current_state['organisms']:
-            del self.current_state['organisms'][org_id]
 
     def calculate_organism_speed(self, organism):
         return organism.movement_speed * self.simulation_fps

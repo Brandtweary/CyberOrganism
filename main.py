@@ -234,6 +234,8 @@ def draw_simulation(screen, sim_state, font, clock):
 
 def draw_items(screen, sim_state):
     for item_id, item in sim_state.current_state['items'].items():
+        if item.get('marked_for_deletion', False):
+            raise Exception(f"Item {item_id} is marked for deletion but still present in the state snapshot.")
         screen_x, screen_y = sim_state.matrika.grid_to_screen(item['x'], item['y'])
         pygame.draw.rect(screen, item['color'], (screen_x, screen_y, sim_state.matrika.CELL_SIZE, sim_state.matrika.CELL_SIZE))
 

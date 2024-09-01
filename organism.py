@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 import random
 import math
 from collections import deque
@@ -10,6 +11,14 @@ from typing import Dict, Any, Tuple, Callable, List, Optional
 import numpy as np
 from uuid import UUID, uuid4
 from state_snapshot import StateSnapshot
+from enum import Enum
+
+class Action(Enum):
+    UP = 0
+    DOWN = 1
+    LEFT = 2
+    RIGHT = 3
+    NO_MOVE = 4
 
 class DQNNetwork(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
@@ -42,16 +51,27 @@ class Organism:
         self.id: UUID = uuid4()
         self.matrika = matrika
         self.input_parameters: List[str] = []
-        self.display_parameters: List[str] = ['energy', 'nutrition', 'loss_avg', 'reward_avg', 'epsilon']
+        self.display_parameters: List[str] = [
+            'energy',
+            'nutrition',
+            'loss_avg',
+            'reward_avg',
+            'epsilon',
+            'q_value_average',
+            'expected_q_value_average'
+        ]
         self.energy: float = 5.0
         self.nutrition: float = 0.0
         self.loss_avg: float = 0.0
+        self.q_value_average: float = 0.0
+        self.expected_q_value_average: float = 0.0
         self.epsilon: float = 1.0  # Start with 100% exploration
         self.epsilon_min: float = 0.01  # Minimum exploration rate
         self.epsilon_decay: float = 0.995  # Decay rate for epsilon
+        self.boltzmann_temperature: float = 0.2
         self.movement_speed: float = 1.0
         self.attention_speed: float = 3.0 
-        self.detection_radius: int = 100
+        self.detection_radius: int = 75
         self.consumption_range: int = 3
         self.max_nearest_items: int = 1
         self.nearest_item_params: int = 3
@@ -65,9 +85,11 @@ class Organism:
         self.attention_x, self.attention_y = initial_position
 
         # DQN and training
+        self.action_mapping = {action.value: action.name for action in Action}
+        
         input_size: int = len(self.input_parameters) + self.nearest_item_params * self.max_nearest_items + 4
         hidden_size: int = 32
-        output_size: int = 4  # 4 discrete actions: up, down, left, right
+        output_size: int = len(self.action_mapping)
         self.dqn: DQN = DQN(input_size, hidden_size, output_size)
         self.optimizer: optim.Optimizer = optim.Adam(self.dqn.parameters(), lr=1e-3)
         self.gamma: float = 0.9
@@ -150,24 +172,42 @@ class Organism:
 
     def select_attention_move(self, state: torch.Tensor) -> int:
         if random.random() < self.epsilon:
-            action = random.randint(0, 3)  # Explore: choose a random action
+            # Epsilon-greedy exploration
+            action_index = random.randint(0, len(self.action_mapping) - 1)
         else:
             with torch.no_grad():
-                q_values = self.dqn.policy_net(state)
-                action = q_values.argmax().item()  # Exploit: choose the best action
+                q_values = self.dqn.policy_net(state).squeeze()
+            
+            # Apply Boltzmann exploration
+            action_index = self.boltzmann_exploration(q_values)
+        
+        return action_index
 
-        return action
+    def boltzmann_exploration(self, q_values: torch.Tensor) -> int:
+        # Apply softmax with temperature
+        probabilities = F.softmax(q_values / self.boltzmann_temperature, dim=0)
+        
+        # Convert to numpy for numpy's choice function
+        probabilities = probabilities.cpu().numpy()
+        
+        # Choose action based on probabilities
+        action_index = np.random.choice(len(self.action_mapping), p=probabilities)
+        
+        return action_index
 
-    def update_attention_point(self, action: int) -> Tuple[float, float]:
+    def update_attention_point(self, action_index: int) -> Tuple[float, float]:
+        action = Action(action_index)
         dx, dy = 0, 0
-        if action == 0:  # Move up
+        if action == Action.UP:
             dy = -self.attention_move_distance
-        elif action == 1:  # Move down
+        elif action == Action.DOWN:
             dy = self.attention_move_distance
-        elif action == 2:  # Move left
+        elif action == Action.LEFT:
             dx = -self.attention_move_distance
-        elif action == 3:  # Move right
+        elif action == Action.RIGHT:
             dx = self.attention_move_distance
+        elif action == Action.NO_MOVE:
+            return 0, 0
 
         return dx * self.attention_speed, dy * self.attention_speed
 
@@ -212,8 +252,8 @@ class Organism:
             Dict[str, Any]: A dictionary containing the changes to be applied to the external state.
         """
         internal_state, nearest_item_ids = self.get_internal_state(external_state)
-        action = self.select_attention_move(internal_state)
-        attention_vector = self.update_attention_point(action)
+        action_index = self.select_attention_move(internal_state)
+        attention_vector = self.update_attention_point(action_index)
         move_x, move_y = self.move(external_state, attention_vector)
         
         external_state_change = {
@@ -229,7 +269,7 @@ class Organism:
         # Store the current experience
         self.current_experience = {
             'state': internal_state,
-            'action': action,
+            'action': action_index,
             'reward': None,  # Will be set in apply_state
             'next_state': None  # Will be set in apply_state
         }
@@ -256,9 +296,12 @@ class Organism:
             # Reward based on distance improvement (positive or negative)
             improvement_reward = 0.5 * math.copysign(math.log1p(abs(distance_improvement) * 100), distance_improvement)
             
+            # Calculate normalized distance for proximity reward
+            normalized_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
+            
             # Only include proximity reward if there's a positive distance improvement
             if distance_improvement > 0:
-                proximity_reward = 1.0 / (1.0 + new_distance)  # Higher for smaller distances
+                proximity_reward = 1.0 / (1.0 + normalized_distance)  # Higher for smaller distances
                 reward = improvement_reward + proximity_reward
             else:
                 reward = improvement_reward
@@ -338,6 +381,8 @@ class Organism:
         self.expected_q_history.append(expected_q_values.mean().item())
 
         self.loss_avg = sum(self.loss_history) / len(self.loss_history)
+        self.q_value_avg = sum(self.q_value_history) / len(self.q_value_history)
+        self.expected_q_value_avg = sum(self.expected_q_history) / len(self.expected_q_history)
 
         self.training_steps += 1
         if self.training_steps % self.target_update == 0:
