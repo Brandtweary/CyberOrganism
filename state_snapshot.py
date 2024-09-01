@@ -1,7 +1,7 @@
 from typing import Dict, Any
 
 
-class StateView:
+class StateSnapshot:
     def __init__(self, state: Dict[str, Any], mutable: bool = False):
         self._state = state
         self._mutable = mutable

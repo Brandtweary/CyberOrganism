@@ -9,7 +9,7 @@ import copy
 from typing import Dict, Any, Tuple, Callable, List, Optional
 import numpy as np
 from uuid import UUID, uuid4
-from state_view import StateView
+from state_snapshot import StateSnapshot
 
 class DQNNetwork(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
@@ -50,7 +50,7 @@ class Organism:
         self.epsilon_min: float = 0.01  # Minimum exploration rate
         self.epsilon_decay: float = 0.995  # Decay rate for epsilon
         self.movement_speed: float = 1.0
-        self.attention_speed: float = 5.0  # 5x faster than movement_speed
+        self.attention_speed: float = 3.0 
         self.detection_radius: int = 100
         self.consumption_range: int = 3
         self.max_nearest_items: int = 1
@@ -66,7 +66,7 @@ class Organism:
 
         # DQN and training
         input_size: int = len(self.input_parameters) + self.nearest_item_params * self.max_nearest_items + 4
-        hidden_size: int = 16
+        hidden_size: int = 32
         output_size: int = 4  # 4 discrete actions: up, down, left, right
         self.dqn: DQN = DQN(input_size, hidden_size, output_size)
         self.optimizer: optim.Optimizer = optim.Adam(self.dqn.parameters(), lr=1e-3)
@@ -74,6 +74,7 @@ class Organism:
         self.training_steps: int = 0
         self.target_update: int = 10
         self.experience_buffer: deque = deque(maxlen=10000)
+        self.batch_size: int = 32
 
         # Training statistics and history
         self.training_stats: TrainingStatistics = TrainingStatistics(self.dqn, self.optimizer)
@@ -94,7 +95,7 @@ class Organism:
                                         lr=parent.optimizer.param_groups[0]['lr'])
         self.training_stats = TrainingStatistics(self.dqn, self.optimizer)
 
-    def get_internal_state(self, external_state: StateView) -> Tuple[torch.Tensor, List[Optional[UUID]]]:
+    def get_internal_state(self, external_state: StateSnapshot) -> Tuple[torch.Tensor, List[Optional[UUID]]]:
         organism_state = external_state['organisms'][str(self.id)]
         organism_x, organism_y = organism_state['x'], organism_state['y']
         
@@ -170,7 +171,7 @@ class Organism:
 
         return dx * self.attention_speed, dy * self.attention_speed
 
-    def move(self, external_state: StateView, attention_vector: Tuple[float, float]) -> Tuple[float, float]:
+    def move(self, external_state: StateSnapshot, attention_vector: Tuple[float, float]) -> Tuple[float, float]:
         org_state = external_state['organisms'][str(self.id)]
         org_x, org_y = org_state['x'], org_state['y']
         current_attention_x, current_attention_y = org_state['attention_point']
@@ -196,7 +197,7 @@ class Organism:
         else:
             return 0, 0
 
-    def update_state(self, external_state: StateView) -> Dict[str, Any]:
+    def update_state(self, external_state: StateSnapshot) -> Dict[str, Any]:
         """
         Update the organism's state based on the current external state.
         
@@ -205,7 +206,7 @@ class Organism:
         other methods to perform specific tasks.
         
         Args:
-            external_state (StateView): The current external state of the environment.
+            external_state (StateSnapshot): The current external state of the environment.
         
         Returns:
             Dict[str, Any]: A dictionary containing the changes to be applied to the external state.
@@ -235,7 +236,7 @@ class Organism:
         
         return external_state_change
 
-    def calculate_rewards(self, old_state: StateView, new_state: StateView) -> float:
+    def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
         old_organism_state = old_state['organisms'][str(self.id)]
         new_organism_state = new_state['organisms'][str(self.id)]
         
@@ -253,7 +254,14 @@ class Organism:
             distance_improvement = old_distance - new_distance
             
             # Reward based on distance improvement (positive or negative)
-            reward = 0.5 * math.copysign(math.log1p(abs(distance_improvement) * 100), distance_improvement)
+            improvement_reward = 0.5 * math.copysign(math.log1p(abs(distance_improvement) * 100), distance_improvement)
+            
+            # Only include proximity reward if there's a positive distance improvement
+            if distance_improvement > 0:
+                proximity_reward = 1.0 / (1.0 + new_distance)  # Higher for smaller distances
+                reward = improvement_reward + proximity_reward
+            else:
+                reward = improvement_reward
         else:
             reward = 0  # No reward if there's no nearest item
         
@@ -267,7 +275,7 @@ class Organism:
         
         return reward
 
-    def apply_state(self, old_state: StateView, new_state: StateView) -> None:
+    def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
         total_reward = self.calculate_rewards(old_state, new_state)
         new_internal_state, _ = self.get_internal_state(new_state)  # Unpack the tuple
         
@@ -300,10 +308,10 @@ class Organism:
         return False
 
     def train(self) -> None:
-        if len(self.experience_buffer) < 16:
+        if len(self.experience_buffer) < self.batch_size:
             return
 
-        batch = random.sample(self.experience_buffer, 16)
+        batch = random.sample(self.experience_buffer, self.batch_size)
         states, actions, rewards, next_states = zip(*batch)
 
         states = torch.stack(states)

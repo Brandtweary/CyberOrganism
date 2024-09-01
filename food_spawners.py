@@ -55,4 +55,4 @@ class FoodSpawner:
 
         new_food = self.matrika.create_item(Food, x, y, energy=energy, nutrition=nutrition, color=color)
         self.next_spawn_time = time.time() + self.calculate_spawn_delay()
-        return new_food
+        return new_food, x, y
