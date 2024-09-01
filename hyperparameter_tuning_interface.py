@@ -11,7 +11,6 @@ class HyperparameterTuningInterface:
 
     def update_hyperparameters(self):
         # RL hyperparameters
-        self.learning_rate = getattr(self.organism.optimizer.param_groups[0], 'lr', None)
         self.discount_factor = getattr(self.organism, 'gamma', None)
         self.epsilon = getattr(self.organism, 'epsilon', None)
         self.epsilon_decay = getattr(self.organism, 'epsilon_decay', None)
@@ -35,8 +34,8 @@ class HyperparameterTuningInterface:
         self.num_items = len(getattr(self.matrika, 'items', []))
         self.initial_energy = getattr(self.organism, 'energy', None)
         self.initial_nutrition = getattr(self.organism, 'nutrition', None)
-        self.energy_consumption_rate = 0.01  # This is hardcoded in update_metabolism
-        self.nutrition_consumption_rate = 0.001  # This is hardcoded in update_metabolism
+        self.energy_consumption = getattr(self.organism, 'energy_consumption', None)
+        self.nutrition_consumption = getattr(self.organism, 'nutrition_consumption', None)
         self.food_replenishment_rate = getattr(self.matrika, 'FOOD_REPLENISHMENT_RATE', None)
 
         # Organism-specific parameters

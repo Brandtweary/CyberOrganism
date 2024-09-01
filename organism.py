@@ -56,7 +56,9 @@ class Organism:
         self.nearest_item_params: int = 3
         self.nearest_items: List[Any] = []
         self.nearest_item: Optional[Any] = None
-        self.attention_move_distance: float = 10.0
+        self.attention_move_distance: float = 1.0
+        self.energy_consumption: float = 0.0
+        self.nutrition_consumption: float = 0.0
 
         # Attention point attributes
         self.attention_x, self.attention_y = initial_position
@@ -232,8 +234,8 @@ class Organism:
         old_organism_state = old_state['organisms'][str(self.id)]
         new_organism_state = new_state['organisms'][str(self.id)]
         
-        old_attention_x, old_attention_y = old_state.get('attention_point', (old_organism_state['x'], old_organism_state['y']))
-        new_attention_x, new_attention_y = new_state['attention_point']
+        old_attention_x, old_attention_y = old_organism_state['attention_point']
+        new_attention_x, new_attention_y = new_organism_state['attention_point']
         
         nearest_item_id = new_organism_state.get('nearest_item_id')
         
@@ -265,11 +267,11 @@ class Organism:
 
     def apply_state(self, old_state: Dict[str, Any], new_state: Dict[str, Any]) -> None:
         total_reward = self.calculate_rewards(old_state, new_state)
-        new_internal_state = self.get_internal_state(new_state)
+        new_internal_state, _ = self.get_internal_state(new_state)  # Unpack the tuple
         
         self.current_experience.update({
             'reward': total_reward,
-            'next_state': new_internal_state
+            'next_state': new_internal_state  # Store only the tensor
         })
         
         self.experience_buffer.append(tuple(self.current_experience.values()))
@@ -278,8 +280,8 @@ class Organism:
         self.train()
 
     def update_metabolism(self) -> Dict[str, Any]:
-        self.energy -= 0.01
-        self.nutrition = max(0, self.nutrition - 0.001)
+        self.energy -= self.energy_consumption
+        self.nutrition = max(0, self.nutrition - self.nutrition_consumption)
         
         should_spawn = self.handle_reproduction()
         
