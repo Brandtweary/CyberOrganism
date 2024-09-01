@@ -71,7 +71,7 @@ class Organism:
         self.boltzmann_temperature: float = 0.2
         self.movement_speed: float = 1.0
         self.attention_speed: float = 3.0 
-        self.detection_radius: int = 75
+        self.detection_radius: int = 100
         self.consumption_range: int = 3
         self.max_nearest_items: int = 1
         self.nearest_item_params: int = 3
