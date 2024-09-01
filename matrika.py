@@ -200,6 +200,9 @@ class Matrika:
         if 'attention_point' in state_change_dict:
             state['organisms'][org_id]['attention_point'] = state_change_dict['attention_point']
         
+        if 'nearest_item_id' in state_change_dict:
+            state['organisms'][org_id]['nearest_item_id'] = state_change_dict['nearest_item_id']
+        
         if 'alive' in state_change_dict and not state_change_dict['alive']:
             state['organisms'][org_id]['marked_for_deletion'] = True
         
@@ -398,7 +401,7 @@ class Matrika:
         
         return new_organism
 
-    def get_nearest_items(self, x, y, num_items, detection_radius, item_type=None):
+    def get_nearest_items(self, x, y, num_items, detection_radius, item_type=None, return_IDs=False):
         item_class_map = {
             'food': Food
         }
@@ -416,7 +419,11 @@ class Matrika:
                              self.current_state['items'][str(item.id)]['x'], 
                              self.current_state['items'][str(item.id)]['y'])
         )
-        return sorted_items[:num_items]
+        
+        if return_IDs:
+            return [item.id for item in sorted_items[:num_items]]
+        else:
+            return sorted_items[:num_items]
 
     def calculate_angle(self, x1, y1, x2, y2):
         dx = x2 - x1

@@ -1,5 +1,7 @@
 from typing import Dict, Any
 
+# Consider giving this class a bigger role in handling data retrieval, and also processing changes
+# For example, you could implement process_external_state_change here and encapsulate all of the logic for updating state snapshots
 
 class ImmutableStateView:
     def __init__(self, state: Dict[str, Any]):

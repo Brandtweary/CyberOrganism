@@ -105,34 +105,34 @@ class Organism:
         for param in self.input_parameters:
             state.append(getattr(self, param))
 
-        nearest_items = self.matrika.get_nearest_items(
+        nearest_item_ids = self.matrika.get_nearest_items(
             organism_x, organism_y, 
             self.max_nearest_items, 
             self.detection_radius,
-            item_type='food'
+            item_type='food',
+            return_IDs=True
         )
 
         # Process nearest items
-        for item in nearest_items:
-            item_state = external_state['items'][str(item.id)]
-            nearest_item_ids.append(item.id)
-            
-            # Distance and direction from organism to item
-            distance_org_item = self.matrika.calculate_distance(organism_x, organism_y, item_state['x'], item_state['y'])
-            direction_org_item = self.matrika.calculate_angle(organism_x, organism_y, item_state['x'], item_state['y'])
-            
-            state.extend([distance_org_item, direction_org_item, item_state['reward']])
+        for item_id in nearest_item_ids:
+            if str(item_id) in external_state['items']:
+                item_state = external_state['items'][str(item_id)]
+                
+                distance_org_item = self.matrika.calculate_distance(organism_x, organism_y, item_state['x'], item_state['y'])
+                direction_org_item = self.matrika.calculate_angle(organism_x, organism_y, item_state['x'], item_state['y'])
+                
+                state.extend([distance_org_item, direction_org_item, item_state['reward']])
 
         # Pad with zeros if fewer items than max_nearest_items
-        padding_length = (self.max_nearest_items - len(nearest_items)) * 3
+        padding_length = (self.max_nearest_items - len(nearest_item_ids)) * 3
         state.extend([0.0] * padding_length)
 
         # Add nearest item IDs padding
-        nearest_item_ids.extend([None] * (self.max_nearest_items - len(nearest_items)))
+        nearest_item_ids.extend([None] * (self.max_nearest_items - len(nearest_item_ids)))
 
         # Add attention point info for the first (nearest) item, if it exists
-        if nearest_items:
-            item_state = external_state['items'][str(nearest_items[0].id)]
+        if nearest_item_ids and str(nearest_item_ids[0]) in external_state['items']:
+            item_state = external_state['items'][str(nearest_item_ids[0])]
             distance_att_item = self.matrika.calculate_distance(self.attention_x, self.attention_y, item_state['x'], item_state['y'])
             direction_att_item = self.matrika.calculate_angle(self.attention_x, self.attention_y, item_state['x'], item_state['y'])
             state.extend([distance_att_item, direction_att_item])
