@@ -68,7 +68,7 @@ class Matrika:
             'nutrition': 2.5
         }
 
-        spawn_range = 20
+        spawn_range = 50
         spawn_frequency = 0.5
         entropy = 0.2
 

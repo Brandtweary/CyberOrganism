@@ -291,46 +291,43 @@ class Organism:
             item_state = new_state['items'][str(nearest_item_id)]
             item_x, item_y = item_state['x'], item_state['y']
             
-            # Calculate proximity penalty
             new_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y)
-            normalized_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
-            proximity_penalty = self.proximity_penalty(normalized_distance)
             
-            # Calculate direction reward
-            attention_delta_x = new_attention_x - old_attention_x
-            attention_delta_y = new_attention_y - old_attention_y
+            if new_distance > 2:
+                # Calculate proximity penalty
+                normalized_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
+                proximity_penalty = self.proximity_penalty(normalized_distance)
+                
+                # Calculate direction reward
+                attention_delta_x = new_attention_x - old_attention_x
+                attention_delta_y = new_attention_y - old_attention_y
 
-            # Calculate movement angle (in radians)
-            if attention_delta_x == 0 and attention_delta_y == 0:
-                movement_angle = 0  # No movement
+                if attention_delta_x == 0 and attention_delta_y == 0:
+                    movement_angle = 0  # No movement
+                else:
+                    movement_angle = math.atan2(attention_delta_y, attention_delta_x)
+
+                target_delta_x = item_x - old_attention_x
+                target_delta_y = item_y - old_attention_y
+                target_angle = math.atan2(target_delta_y, target_delta_x)
+
+                angle_diff = math.atan2(math.sin(target_angle - movement_angle), math.cos(target_angle - movement_angle))
+
+                direction_reward = self.calculate_direction_reward(angle_diff)
+                
+                # Combine rewards
+                reward = proximity_penalty + direction_reward
             else:
-                movement_angle = math.atan2(attention_delta_y, attention_delta_x)
-
-            # Calculate target angle using deltas
-            target_delta_x = item_x - old_attention_x
-            target_delta_y = item_y - old_attention_y
-            target_angle = math.atan2(target_delta_y, target_delta_x)
-
-            # Calculate the smallest angle difference (in radians)
-            angle_diff = math.atan2(math.sin(target_angle - movement_angle), math.cos(target_angle - movement_angle))
-
-            # Calculate direction reward using a more sensitive function
-            direction_reward = self.calculate_direction_reward(angle_diff)
-            
-            # Combine rewards with increased weight on direction
-            reward = proximity_penalty + direction_reward
-            
-            # Focus and stillness rewards
-            attention_movement = self.matrika.calculate_distance(old_attention_x, old_attention_y, new_attention_x, new_attention_y)
-            if new_distance <= 2:
-                reward += 0.5  # Additional reward for being very close
+                # Focus reward when close to the target
+                reward = 1.0  # Base reward for being close
+                
+                attention_movement = self.matrika.calculate_distance(old_attention_x, old_attention_y, new_attention_x, new_attention_y)
                 if attention_movement < 0.1:
-                    reward += 0.5  # Additional reward for staying still when close
+                    reward += 1.0  # Additional reward for staying still when close
         else:
-            reward = -0.2  # Increased penalty if there's no nearest item
+            reward = -0.2  # Penalty if there's no nearest item
         
-        # Add the current_reward from food consumption
-        reward += self.current_reward
+        # Add the current_reward from food consumption        reward += self.current_reward
         self.current_reward = 0.0  # Reset the current_reward after incorporating it
         
         # Update reward history and average
@@ -340,14 +337,20 @@ class Organism:
         return reward
 
     def calculate_direction_reward(self, angle_diff: float) -> float:
-        # Convert angle difference to degrees
-        angle_diff_degrees = math.degrees(abs(angle_diff))
+        # Convert angle difference to degrees and take the absolute value
+        angle_diff_degrees = abs(math.degrees(angle_diff))
         
-        # Use a Gaussian function to calculate the reward
-        sigma = 45  # Standard deviation (in degrees)
-        reward = math.exp(-(angle_diff_degrees ** 2) / (2 * sigma ** 2))
+        # Define the range for positive rewards (±45 degrees)
+        positive_range = 45
         
-        return reward
+        if angle_diff_degrees <= positive_range:
+            # Positive reward for angles within the correct range
+            # Scaled so that 0 degrees gives 1.0 and 45 degrees gives 0.0
+            return 1.0 - (angle_diff_degrees / positive_range)
+        else:
+            # Negative reward for angles outside the correct range
+            # Scaled so that 45 degrees gives 0.0 and 180 degrees gives -1.0
+            return -1.0 * (angle_diff_degrees - positive_range) / (180 - positive_range)
 
     def proximity_penalty(self, normalized_distance, max_penalty=0.5, transition_start=0.2, transition_end=0.1):
         def smooth_step(x):
