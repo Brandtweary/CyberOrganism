@@ -26,6 +26,8 @@ class DQNNetwork(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
             nn.Linear(hidden_size, output_size)
         )
 
@@ -67,7 +69,7 @@ class Organism:
         self.expected_q_value_average: float = 0.0
         self.epsilon: float = 1.0  # Start with 100% exploration
         self.epsilon_min: float = 0.01  # Minimum exploration rate
-        self.epsilon_decay: float = 0.995  # Decay rate for epsilon
+        self.epsilon_decay: float = 0.999  # Decay rate for epsilon
         self.boltzmann_temperature: float = 0.2
         self.movement_speed: float = 1.0
         self.attention_speed: float = 3.0 
@@ -87,8 +89,8 @@ class Organism:
         # DQN and training
         self.action_mapping = {action.value: action.name for action in Action}
         
-        input_size: int = len(self.input_parameters) + self.nearest_item_params * self.max_nearest_items + 4
-        hidden_size: int = 32
+        input_size: int = len(self.input_parameters) + self.nearest_item_params * self.max_nearest_items + 2
+        hidden_size: int = 16
         output_size: int = len(self.action_mapping)
         self.dqn: DQN = DQN(input_size, hidden_size, output_size)
         self.optimizer: optim.Optimizer = optim.Adam(self.dqn.parameters(), lr=1e-3)
@@ -142,8 +144,8 @@ class Organism:
             if str(item_id) in external_state['items']:
                 item_state = external_state['items'][str(item_id)]
                 
-                distance_org_item = self.matrika.calculate_distance(organism_x, organism_y, item_state['x'], item_state['y'])
-                direction_org_item = self.matrika.calculate_angle(organism_x, organism_y, item_state['x'], item_state['y'])
+                distance_org_item = self.matrika.calculate_distance(organism_x, organism_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
+                direction_org_item = self.matrika.calculate_angle(organism_x, organism_y, item_state['x'], item_state['y'], normalize=True)
                 
                 state.extend([distance_org_item, direction_org_item, item_state['reward']])
 
@@ -157,16 +159,16 @@ class Organism:
         # Add attention point info for the first (nearest) item, if it exists
         if nearest_item_ids and str(nearest_item_ids[0]) in external_state['items']:
             item_state = external_state['items'][str(nearest_item_ids[0])]
-            distance_att_item = self.matrika.calculate_distance(self.attention_x, self.attention_y, item_state['x'], item_state['y'])
-            direction_att_item = self.matrika.calculate_angle(self.attention_x, self.attention_y, item_state['x'], item_state['y'])
+            distance_att_item = self.matrika.calculate_distance(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
+            direction_att_item = self.matrika.calculate_angle(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize=True)
             state.extend([distance_att_item, direction_att_item])
         else:
             state.extend([0.0, 0.0])  # Pad with zeros if no nearest item
 
         # Add distance and direction from organism to attention point
-        distance_org_att = self.matrika.calculate_distance(organism_x, organism_y, self.attention_x, self.attention_y)
-        direction_org_att = self.matrika.calculate_angle(organism_x, organism_y, self.attention_x, self.attention_y)
-        state.extend([distance_org_att, direction_org_att])
+        # distance_org_att = self.matrika.calculate_distance(organism_x, organism_y, self.attention_x, self.attention_y, normalize_to_viewport=True)
+        # direction_org_att = self.matrika.calculate_angle(organism_x, organism_y, self.attention_x, self.attention_y, normalize=True)
+        # state.extend([distance_org_att, direction_org_att])
 
         return torch.tensor(state, dtype=torch.float32), nearest_item_ids
 
@@ -287,26 +289,45 @@ class Organism:
         
         if nearest_item_id and nearest_item_id in new_state['items']:
             item_state = new_state['items'][str(nearest_item_id)]
+            item_x, item_y = item_state['x'], item_state['y']
             
-            old_distance = self.matrika.calculate_distance(old_attention_x, old_attention_y, item_state['x'], item_state['y'])
-            new_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_state['x'], item_state['y'])
+            # Calculate proximity penalty
+            new_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y)
+            normalized_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
+            proximity_penalty = self.proximity_penalty(normalized_distance)
             
-            distance_improvement = old_distance - new_distance
-            
-            # Reward based on distance improvement (positive or negative)
-            improvement_reward = 0.5 * math.copysign(math.log1p(abs(distance_improvement) * 100), distance_improvement)
-            
-            # Calculate normalized distance for proximity reward
-            normalized_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
-            
-            # Only include proximity reward if there's a positive distance improvement
-            if distance_improvement > 0:
-                proximity_reward = 1.0 / (1.0 + normalized_distance)  # Higher for smaller distances
-                reward = improvement_reward + proximity_reward
+            # Calculate direction reward
+            attention_delta_x = new_attention_x - old_attention_x
+            attention_delta_y = new_attention_y - old_attention_y
+
+            # Calculate movement angle (in radians)
+            if attention_delta_x == 0 and attention_delta_y == 0:
+                movement_angle = 0  # No movement
             else:
-                reward = improvement_reward
+                movement_angle = math.atan2(attention_delta_y, attention_delta_x)
+
+            # Calculate target angle using deltas
+            target_delta_x = item_x - old_attention_x
+            target_delta_y = item_y - old_attention_y
+            target_angle = math.atan2(target_delta_y, target_delta_x)
+
+            # Calculate the smallest angle difference (in radians)
+            angle_diff = math.atan2(math.sin(target_angle - movement_angle), math.cos(target_angle - movement_angle))
+
+            # Calculate direction reward using a more sensitive function
+            direction_reward = self.calculate_direction_reward(angle_diff)
+            
+            # Combine rewards with increased weight on direction
+            reward = proximity_penalty + direction_reward
+            
+            # Focus and stillness rewards
+            attention_movement = self.matrika.calculate_distance(old_attention_x, old_attention_y, new_attention_x, new_attention_y)
+            if new_distance <= 2:
+                reward += 0.5  # Additional reward for being very close
+                if attention_movement < 0.1:
+                    reward += 0.5  # Additional reward for staying still when close
         else:
-            reward = 0  # No reward if there's no nearest item
+            reward = -0.2  # Increased penalty if there's no nearest item
         
         # Add the current_reward from food consumption
         reward += self.current_reward
@@ -317,6 +338,32 @@ class Organism:
         self.reward_avg = sum(self.reward_history) / len(self.reward_history)
         
         return reward
+
+    def calculate_direction_reward(self, angle_diff: float) -> float:
+        # Convert angle difference to degrees
+        angle_diff_degrees = math.degrees(abs(angle_diff))
+        
+        # Use a Gaussian function to calculate the reward
+        sigma = 45  # Standard deviation (in degrees)
+        reward = math.exp(-(angle_diff_degrees ** 2) / (2 * sigma ** 2))
+        
+        return reward
+
+    def proximity_penalty(self, normalized_distance, max_penalty=0.5, transition_start=0.2, transition_end=0.1):
+        def smooth_step(x):
+            # Smooth step function
+            x = max(0, min(1, (x - transition_end) / (transition_start - transition_end)))
+            return x * x * (3 - 2 * x)
+        
+        # Linear component
+        linear_penalty = max_penalty * normalized_distance
+        
+        # Smooth step component
+        step_factor = smooth_step(normalized_distance)
+        
+        # Combine linear and step components
+        return -linear_penalty * step_factor
+
 
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
         total_reward = self.calculate_rewards(old_state, new_state)
@@ -381,8 +428,8 @@ class Organism:
         self.expected_q_history.append(expected_q_values.mean().item())
 
         self.loss_avg = sum(self.loss_history) / len(self.loss_history)
-        self.q_value_avg = sum(self.q_value_history) / len(self.q_value_history)
-        self.expected_q_value_avg = sum(self.expected_q_history) / len(self.expected_q_history)
+        self.q_value_average = sum(self.q_value_history) / len(self.q_value_history)
+        self.expected_q_value_average = sum(self.expected_q_history) / len(self.expected_q_history)
 
         self.training_steps += 1
         if self.training_steps % self.target_update == 0:

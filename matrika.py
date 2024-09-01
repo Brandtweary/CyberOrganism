@@ -54,13 +54,9 @@ class Matrika:
         self.initialize_food_spawners()
 
     def initialize_food_spawners(self):
-        margin = 15  # Cells inward from the corners
-        spawner_positions = [
-            (self.viewport_center_x - self.viewport_width // 2 + margin, self.viewport_center_y - self.viewport_height // 2 + margin),
-            (self.viewport_center_x + self.viewport_width // 2 - margin, self.viewport_center_y - self.viewport_height // 2 + margin),
-            (self.viewport_center_x - self.viewport_width // 2 + margin, self.viewport_center_y + self.viewport_height // 2 - margin),
-            (self.viewport_center_x + self.viewport_width // 2 - margin, self.viewport_center_y + self.viewport_height // 2 - margin)
-        ]
+        # Center of the viewport
+        center_x = self.viewport_center_x
+        center_y = self.viewport_center_y
 
         regular_food_params = {
             'energy': 2.0,
@@ -76,11 +72,10 @@ class Matrika:
         spawn_frequency = 0.5
         entropy = 0.2
 
-        for x, y in spawner_positions:
-            self.create_food_spawner(x, y, regular_food_params, high_energy_food_params, 
-                                       spawn_frequency=spawn_frequency, 
-                                       spawn_range=spawn_range, 
-                                       entropy=entropy)
+        self.create_food_spawner(center_x, center_y, regular_food_params, high_energy_food_params, 
+                                   spawn_frequency=spawn_frequency, 
+                                   spawn_range=spawn_range, 
+                                   entropy=entropy)
 
     def create_food_spawner(self, x, y, regular_food_params, high_energy_food_params, spawn_frequency=0.5, spawn_range=20, entropy=0.2):
         spawner = FoodSpawner(spawn_frequency, regular_food_params, high_energy_food_params, spawn_range, entropy, matrika=self)
@@ -385,10 +380,17 @@ class Matrika:
         else:
             return sorted_items[:num_items]
 
-    def calculate_angle(self, x1, y1, x2, y2):
+    def calculate_angle(self, x1, y1, x2, y2, normalize=False):
         dx = x2 - x1
         dy = y2 - y1
-        return math.atan2(dy, dx)
+        angle = math.atan2(dy, dx)
+        
+        if normalize:
+            # Normalize angle to [0, 1] range
+            normalized_angle = (angle + math.pi) / (2 * math.pi)
+            return normalized_angle
+        
+        return angle
     
     def item_exists(self, item_id):
         return any(item.id == item_id for item in self.items)
