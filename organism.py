@@ -463,6 +463,9 @@ class Organism:
         
         expected_q_values = rewards + (self.gamma * next_q_values)
 
+        # Calculate TD errors
+        td_errors = torch.abs(current_q_values - expected_q_values.unsqueeze(1))
+
         # Use Huber loss with importance sampling weights
         losses = F.huber_loss(current_q_values, expected_q_values.unsqueeze(1), reduction='none', delta=1.0)
         loss = (losses * weights.unsqueeze(1)).mean()
@@ -472,8 +475,8 @@ class Organism:
         torch.nn.utils.clip_grad_norm_(self.dqn.policy_net.parameters(), max_norm=self.gradient_clip)
         self.optimizer.step()
 
-        # Update priorities
-        new_priorities = losses.detach().cpu().numpy().flatten()
+        # Update priorities using TD errors
+        new_priorities = td_errors.detach().cpu().numpy().flatten()
         self.replay_buffer.update_priorities(idxs, new_priorities)
 
         self.loss_history.append(loss.item())
