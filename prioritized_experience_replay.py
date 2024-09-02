@@ -1,6 +1,7 @@
 import numpy as np
-from collections import namedtuple
+from collections import namedtuple, deque
 from typing import List, Tuple
+import random
 
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state'])
 
@@ -40,6 +41,7 @@ class SumTree:
         self.write = (self.write + 1) % self.capacity
         if self.n_entries < self.capacity:
             self.n_entries += 1
+        return idx  # Return the index where the experience was added
 
     def update(self, idx, p):
         change = p - self.tree[idx]
@@ -51,46 +53,75 @@ class SumTree:
         dataIdx = idx - self.capacity + 1
         return (idx, self.tree[idx], self.data[dataIdx])
 
+    def get_priority(self, idx):
+        return self.tree[idx]
+
 class PrioritizedExperienceReplay:
-    def __init__(self, capacity: int, batch_size: int, alpha: float = 0.6, beta: float = 0.4, beta_increment: float = 0.001, epsilon: float = 1e-6):
+    def __init__(self, capacity: int, batch_size: int, alpha: float = 0.6, epsilon: float = 1e-6):
         self.tree = SumTree(capacity)
         self.capacity = capacity
         self.batch_size = batch_size
         self.alpha = alpha
-        self.beta = beta
-        self.beta_increment = beta_increment
         self.epsilon = epsilon
         self.max_priority = 1.0
+        
+        self.recent_buffer = []
+        self.recent_buffer_max_size = 2 * batch_size
 
     def add(self, experience: Experience) -> None:
-        priority = self.max_priority ** self.alpha
-        self.tree.add(priority, experience)
+        # Add new experience to the recent buffer
+        self.recent_buffer.append(experience)
+        
+        # If recent buffer exceeds max size, move oldest experience to the tree
+        if len(self.recent_buffer) > self.recent_buffer_max_size:
+            oldest_experience = self.recent_buffer.pop(0)
+            self.tree.add(self.max_priority ** self.alpha, oldest_experience)
 
-    def sample(self) -> Tuple[List[Experience], List[int], np.ndarray]:
+    def sample(self) -> Tuple[List[Experience], List[int]]:
         batch = []
         idxs = []
-        priorities = []
-        segment = self.tree.total() / self.batch_size
 
-        for i in range(self.batch_size):
+        # First, try to sample up to half the batch size from the tree
+        tree_sample_size = min(self.tree.n_entries, self.batch_size // 2)
+        self._sample_from_tree(batch, idxs, tree_sample_size)
+
+        # Then, sample from the recent buffer
+        recent_sample_size = min(len(self.recent_buffer), self.batch_size - len(batch))
+        self._sample_from_recent(batch, idxs, recent_sample_size)
+
+        # If we still need more samples, get them from the tree
+        remaining_sample_size = self.batch_size - len(batch)
+        if remaining_sample_size > 0:
+            self._sample_from_tree(batch, idxs, remaining_sample_size)
+
+        return batch, idxs
+
+    def _sample_from_tree(self, batch: List[Experience], idxs: List[int], n_samples: int) -> None:
+        if n_samples == 0:
+            return
+        segment = self.tree.total() / n_samples
+        for i in range(n_samples):
             a = segment * i
             b = segment * (i + 1)
-            s = np.random.uniform(a, b)
-            idx, priority, experience = self.tree.get(s)
-            priorities.append(priority)
-            batch.append(experience)
+            s = random.uniform(a, b)
+            idx, _, data = self.tree.get(s)
+            batch.append(data)
             idxs.append(idx)
 
-        sampling_probabilities = np.array(priorities) / self.tree.total()
-        weights = (self.capacity * sampling_probabilities) ** -self.beta
-        weights /= weights.max()
-
-        self.beta = min(1.0, self.beta + self.beta_increment)
-
-        return batch, idxs, weights
+    def _sample_from_recent(self, batch: List[Experience], idxs: List[int], n_samples: int) -> None:
+        for _ in range(n_samples):
+            if not self.recent_buffer:  # Check if recent buffer is empty
+                break
+            exp = self.recent_buffer.pop(0)  # Get the oldest experience
+            idx = self.tree.add(self.max_priority ** self.alpha, exp)
+            batch.append(exp)
+            idxs.append(idx)
 
     def update_priorities(self, idxs: List[int], priorities: np.ndarray) -> None:
         for idx, priority in zip(idxs, priorities):
             priority = (priority + self.epsilon) ** self.alpha
             self.tree.update(idx, priority)
             self.max_priority = max(self.max_priority, priority)
+
+    def can_sample(self) -> bool:
+        return len(self.recent_buffer) >= self.batch_size or self.tree.n_entries >= self.batch_size

@@ -97,11 +97,11 @@ class Organism:
         self.optimizer: optim.Optimizer = optim.Adam(self.dqn.parameters(), lr=0.001)
         self.gamma: float = 0.9
         self.training_steps: int = 0
-        self.target_update: int = 10
-        self.replay_buffer = PrioritizedExperienceReplay(capacity=100000, batch_size=64)
-        self.batch_size: int = 32
+        self.target_update: int = 100
+        self.batch_size: int = 4
+        self.capacity: int = 100000
+        self.replay_buffer = PrioritizedExperienceReplay(capacity=self.capacity, batch_size=self.batch_size)
         self.gradient_clip: float = 1.0
-        
 
         # Training statistics and history
         self.training_stats: TrainingStatistics = TrainingStatistics(self.dqn, self.optimizer)
@@ -444,45 +444,59 @@ class Organism:
         return False
 
     def train(self) -> None:
-        if self.replay_buffer.tree.n_entries < self.batch_size:
+        if not self.replay_buffer.can_sample():
             return
 
-        batch, idxs, weights = self.replay_buffer.sample()
-        states, actions, rewards, next_states = zip(*batch)
-
-        states = torch.stack(states)
-        next_states = torch.stack(next_states)
-        actions = torch.tensor(actions, dtype=torch.long)
-        rewards = torch.tensor(rewards, dtype=torch.float32)
-        weights = torch.tensor(weights, dtype=torch.float32)
-
-        current_q_values = self.dqn.policy_net(states).gather(1, actions.unsqueeze(1))
+        batch, idxs = self.replay_buffer.sample()  # No longer expecting weights
         
-        with torch.no_grad():
-            next_q_values = self.dqn.target_net(next_states).max(1)[0]
+        self.optimizer.zero_grad()  # Zero gradients at the start
+        total_loss = 0
+        total_q_value = 0
+        total_expected_q_value = 0
         
-        expected_q_values = rewards + (self.gamma * next_q_values)
+        for experience in batch:
+            state, action, reward, next_state = experience
+            
+            state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+            next_state = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0)
+            action = torch.tensor([action], dtype=torch.long)
+            reward = torch.tensor([reward], dtype=torch.float32)
 
-        # Calculate TD errors
-        td_errors = torch.abs(current_q_values - expected_q_values.unsqueeze(1))
+            # Compute Q(s_t, a) - the model computes Q(s_t), then we select the columns of actions taken
+            current_q_values = self.dqn.policy_net(state).gather(1, action.unsqueeze(1))
 
-        # Use Huber loss with importance sampling weights
-        losses = F.huber_loss(current_q_values, expected_q_values.unsqueeze(1), reduction='none', delta=1.0)
-        loss = (losses * weights.unsqueeze(1)).mean()
+            with torch.no_grad():
+                # Compute V(s_{t+1}) for all next states
+                next_q_values = self.dqn.target_net(next_state).max(1)[0].detach()
 
-        self.optimizer.zero_grad()
-        loss.backward()
+            # Compute the expected Q values
+            expected_q_values = reward + (self.gamma * next_q_values)
+
+            # Compute smooth L1 loss (Huber loss)
+            loss = F.smooth_l1_loss(current_q_values, expected_q_values.unsqueeze(1))
+            
+            # Backward pass (accumulate gradients)
+            loss.backward()
+            
+            total_loss += loss.item()
+            total_q_value += current_q_values.item()
+            total_expected_q_value += expected_q_values.item()
+
+            # Compute TD error for updating priorities
+            td_error = abs(current_q_values.item() - expected_q_values.item())
+            self.replay_buffer.update_priorities([idxs[batch.index(experience)]], [td_error])
+
+        # Clip gradients
         torch.nn.utils.clip_grad_norm_(self.dqn.policy_net.parameters(), max_norm=self.gradient_clip)
+        
+        # Optimize the model (single step for the whole batch)
         self.optimizer.step()
 
-        # Update priorities using TD errors
-        new_priorities = td_errors.detach().cpu().numpy().flatten()
-        self.replay_buffer.update_priorities(idxs, new_priorities)
-
-        self.loss_history.append(loss.item())
-        self.q_value_history.append(current_q_values.mean().item())
-        self.expected_q_history.append(expected_q_values.mean().item())
-
+        # Update statistics
+        self.loss_history.append(total_loss / len(batch))
+        self.q_value_history.append(total_q_value / len(batch))
+        self.expected_q_history.append(total_expected_q_value / len(batch))
+        
         self.loss_avg = sum(self.loss_history) / len(self.loss_history)
         self.q_value_average = sum(self.q_value_history) / len(self.q_value_history)
         self.expected_q_value_average = sum(self.expected_q_history) / len(self.expected_q_history)
@@ -490,7 +504,7 @@ class Organism:
         self.training_steps += 1
         if self.training_steps % self.target_update == 0:
             self.dqn.update_target_net()
-    
+
         self.decay_epsilon()  # Decay epsilon after each training step
 
     def decay_epsilon(self):
