@@ -84,9 +84,6 @@ class Organism:
         self.energy_consumption: float = 0.0
         self.nutrition_consumption: float = 0.0
 
-        # Attention point attributes
-        self.attention_x, self.attention_y = initial_position
-
         # DQN and training
         self.action_mapping = {action.value: action.name for action in Action}
         
