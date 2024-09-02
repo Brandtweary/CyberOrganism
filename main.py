@@ -233,10 +233,27 @@ def draw_simulation(screen, sim_state, font, clock):
     display_simulation_stats(screen, font, clock, sim_state)
 
 def draw_items(screen, sim_state):
+    # Collect all nearest item IDs from organisms
+    nearest_item_ids = set()
+    for org_state in sim_state.current_state['organisms'].values():
+        if 'nearest_item_id' in org_state and org_state['nearest_item_id'] is not None:
+            nearest_item_ids.add(str(org_state['nearest_item_id']))
+
     for item_id, item in sim_state.current_state['items'].items():
         if item.get('marked_for_deletion', False):
             raise Exception(f"Item {item_id} is marked for deletion but still present in the state snapshot.")
+        
         screen_x, screen_y = sim_state.matrika.grid_to_screen(item['x'], item['y'])
+        
+        # If this item is a nearest item for any organism, draw an orange halo
+        if str(item_id) in nearest_item_ids:
+            halo_size = sim_state.matrika.CELL_SIZE * 3  # 3x3 grid including the item
+            halo_x = screen_x - sim_state.matrika.CELL_SIZE
+            halo_y = screen_y - sim_state.matrika.CELL_SIZE
+            pygame.draw.rect(screen, (255, 165, 0),  # Orange color
+                             (halo_x, halo_y, halo_size, halo_size))
+        
+        # Draw the item
         pygame.draw.rect(screen, item['color'], (screen_x, screen_y, sim_state.matrika.CELL_SIZE, sim_state.matrika.CELL_SIZE))
 
 

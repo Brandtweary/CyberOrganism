@@ -93,12 +93,14 @@ class Organism:
         hidden_size: int = 16
         output_size: int = len(self.action_mapping)
         self.dqn: DQN = DQN(input_size, hidden_size, output_size)
-        self.optimizer: optim.Optimizer = optim.Adam(self.dqn.parameters(), lr=1e-3)
+        self.optimizer: optim.Optimizer = optim.Adam(self.dqn.parameters(), lr=0.001)
         self.gamma: float = 0.9
         self.training_steps: int = 0
         self.target_update: int = 10
         self.experience_buffer: deque = deque(maxlen=10000)
         self.batch_size: int = 32
+        self.gradient_clip: float = 1.0
+        
 
         # Training statistics and history
         self.training_stats: TrainingStatistics = TrainingStatistics(self.dqn, self.optimizer)
@@ -449,11 +451,12 @@ class Organism:
         
         expected_q_values = rewards + (self.gamma * next_q_values)
 
-        loss = nn.functional.smooth_l1_loss(current_q_values, expected_q_values.unsqueeze(1))
+        # Use Huber loss
+        loss = F.huber_loss(current_q_values, expected_q_values.unsqueeze(1), reduction='mean', delta=1.0)
 
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.dqn.policy_net.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(self.dqn.policy_net.parameters(), max_norm=self.gradient_clip)
         self.optimizer.step()
 
         self.loss_history.append(loss.item())
