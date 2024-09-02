@@ -329,7 +329,7 @@ class Organism:
             if new_distance > 2:
                 # Calculate proximity penalty
                 normalized_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
-                proximity_penalty = self.proximity_penalty(normalized_distance)
+                proximity_penalty = self.proximity_penalty(normalized_distance, method='exponential')
                 
                 # Calculate direction reward
                 attention_delta_x = new_attention_x - old_attention_x
@@ -385,20 +385,27 @@ class Organism:
             # Scaled so that 45 degrees gives 0.0 and 180 degrees gives -1.0
             return -1.0 * (angle_diff_degrees - positive_range) / (180 - positive_range)
 
-    def proximity_penalty(self, normalized_distance, max_penalty=0.5, transition_start=0.2, transition_end=0.1):
+
+    def proximity_penalty(self, normalized_distance, max_penalty=0.5, transition_start=0.2, transition_end=0.1, method='quadratic'):
         def smooth_step(x):
             # Smooth step function
             x = max(0, min(1, (x - transition_end) / (transition_start - transition_end)))
             return x * x * (3 - 2 * x)
         
-        # Linear component
-        linear_penalty = max_penalty * normalized_distance
+        if method == 'quadratic':
+            # Quadratic penalty
+            penalty = max_penalty * (normalized_distance ** 2)
+        elif method == 'exponential':
+            # Exponential penalty
+            penalty = max_penalty * (math.exp(normalized_distance) - 1) / (math.e - 1)
+        else:
+            raise ValueError("Invalid method. Choose 'quadratic' or 'exponential'.")
         
         # Smooth step component
         step_factor = smooth_step(normalized_distance)
         
-        # Combine linear and step components
-        return -linear_penalty * step_factor
+        # Combine penalty and step components
+        return -penalty * step_factor
 
 
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
