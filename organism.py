@@ -111,6 +111,7 @@ class Organism:
         # Current experience
         self.current_experience = None
         self.current_reward = 0.0
+        self.item_memory: List[UUID] = []  # New attribute to store remembered item IDs
 
     def clone(self: 'Organism', parent: 'Organism') -> None:
         """Clone the parent organism's DQN, optimizer, and training stats."""
@@ -138,6 +139,11 @@ class Organism:
             item_type='food',
             return_IDs=True
         )
+
+        self.update_item_memory(nearest_item_ids)
+
+        if not nearest_item_ids:
+            nearest_item_ids = self.get_item_from_memory(organism_x, organism_y, external_state)
 
         # Process nearest items
         for item_id in nearest_item_ids:
@@ -171,6 +177,30 @@ class Organism:
         # state.extend([distance_org_att, direction_org_att])
 
         return torch.tensor(state, dtype=torch.float32), nearest_item_ids
+
+    def update_item_memory(self, nearest_item_ids: List[UUID]) -> None:
+        """Update the item_memory list with new unique IDs."""
+        for item_id in nearest_item_ids:
+            if item_id not in self.item_memory:
+                self.item_memory.append(item_id)
+
+    def get_item_from_memory(self, organism_x: float, organism_y: float, external_state: StateSnapshot) -> List[Optional[UUID]]:
+        """Retrieve the nearest remembered item that still exists."""
+        memory_copy = self.item_memory.copy()
+        nearest_item = None
+        nearest_distance = float('inf')
+
+        for item_id in memory_copy:
+            if self.matrika.item_exists(str(item_id)):
+                item_state = external_state['items'][str(item_id)]
+                distance = self.matrika.calculate_distance(organism_x, organism_y, item_state['x'], item_state['y'])
+                if distance < nearest_distance:
+                    nearest_item = item_id
+                    nearest_distance = distance
+            else:
+                self.item_memory.remove(item_id)
+
+        return [nearest_item] if nearest_item else []
 
     def select_attention_move(self, state: torch.Tensor) -> int:
         if random.random() < self.epsilon:
@@ -325,7 +355,7 @@ class Organism:
                 if attention_movement < 0.1:
                     reward += 1.0  # Additional reward for staying still when close
         else:
-            reward = -0.2  # Penalty if there's no nearest item
+            reward = -0.444  # Penalty if there's no nearest item
         
         # Add the current_reward from food consumption        reward += self.current_reward
         self.current_reward = 0.0  # Reset the current_reward after incorporating it

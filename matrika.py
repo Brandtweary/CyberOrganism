@@ -393,7 +393,7 @@ class Matrika:
         return angle
     
     def item_exists(self, item_id):
-        return any(item.id == item_id for item in self.items)
+        return any(str(item.id) == item_id for item in self.items)
 
     def get_item_by_ID(self, item_id):
         if isinstance(item_id, str):
