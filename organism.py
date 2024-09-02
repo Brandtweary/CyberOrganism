@@ -12,6 +12,7 @@ import numpy as np
 from uuid import UUID, uuid4
 from state_snapshot import StateSnapshot
 from enum import Enum
+from prioritized_experience_replay import PrioritizedExperienceReplay, Experience
 
 class Action(Enum):
     UP = 0
@@ -97,7 +98,7 @@ class Organism:
         self.gamma: float = 0.9
         self.training_steps: int = 0
         self.target_update: int = 10
-        self.experience_buffer: deque = deque(maxlen=10000)
+        self.replay_buffer = PrioritizedExperienceReplay(capacity=10000, batch_size=32)
         self.batch_size: int = 32
         self.gradient_clip: float = 1.0
         
@@ -402,14 +403,17 @@ class Organism:
 
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
         total_reward = self.calculate_rewards(old_state, new_state)
-        new_internal_state, _ = self.get_internal_state(new_state)  # Unpack the tuple
+        new_internal_state, _ = self.get_internal_state(new_state)
         
-        self.current_experience.update({
-            'reward': total_reward,
-            'next_state': new_internal_state  # Store only the tensor
-        })
+        experience = Experience(
+            state=self.current_experience['state'],
+            action=self.current_experience['action'],
+            reward=total_reward,
+            next_state=new_internal_state
+        )
         
-        self.experience_buffer.append(tuple(self.current_experience.values()))
+        self.replay_buffer.add(experience)
+        
         self.current_experience = None
         
         self.train()
@@ -433,16 +437,17 @@ class Organism:
         return False
 
     def train(self) -> None:
-        if len(self.experience_buffer) < self.batch_size:
+        if self.replay_buffer.tree.n_entries < self.batch_size:
             return
 
-        batch = random.sample(self.experience_buffer, self.batch_size)
+        batch, idxs, weights = self.replay_buffer.sample()
         states, actions, rewards, next_states = zip(*batch)
 
         states = torch.stack(states)
         next_states = torch.stack(next_states)
         actions = torch.tensor(actions, dtype=torch.long)
         rewards = torch.tensor(rewards, dtype=torch.float32)
+        weights = torch.tensor(weights, dtype=torch.float32)
 
         current_q_values = self.dqn.policy_net(states).gather(1, actions.unsqueeze(1))
         
@@ -451,13 +456,18 @@ class Organism:
         
         expected_q_values = rewards + (self.gamma * next_q_values)
 
-        # Use Huber loss
-        loss = F.huber_loss(current_q_values, expected_q_values.unsqueeze(1), reduction='mean', delta=1.0)
+        # Use Huber loss with importance sampling weights
+        losses = F.huber_loss(current_q_values, expected_q_values.unsqueeze(1), reduction='none', delta=1.0)
+        loss = (losses * weights.unsqueeze(1)).mean()
 
         self.optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.dqn.policy_net.parameters(), max_norm=self.gradient_clip)
         self.optimizer.step()
+
+        # Update priorities
+        new_priorities = losses.detach().cpu().numpy().flatten()
+        self.replay_buffer.update_priorities(idxs, new_priorities)
 
         self.loss_history.append(loss.item())
         self.q_value_history.append(current_q_values.mean().item())
