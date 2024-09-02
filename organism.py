@@ -90,7 +90,7 @@ class Organism:
         # DQN and training
         self.action_mapping = {action.value: action.name for action in Action}
         
-        input_size: int = len(self.input_parameters) + self.nearest_item_params * self.max_nearest_items + 2
+        input_size: int = len(self.input_parameters) + self.nearest_item_params * self.max_nearest_items + 4
         hidden_size: int = 16
         output_size: int = len(self.action_mapping)
         self.dqn: DQN = DQN(input_size, hidden_size, output_size)
@@ -126,6 +126,7 @@ class Organism:
     def get_internal_state(self, external_state: StateSnapshot) -> Tuple[torch.Tensor, List[Optional[UUID]]]:
         organism_state = external_state['organisms'][str(self.id)]
         organism_x, organism_y = organism_state['x'], organism_state['y']
+        attention_x, attention_y = organism_state['attention_point']  # Get attention point from external state
         
         state: List[float] = []
         nearest_item_ids: List[Optional[UUID]] = []
@@ -168,16 +169,16 @@ class Organism:
         # Add attention point info for the first (nearest) item, if it exists
         if nearest_item_ids and str(nearest_item_ids[0]) in external_state['items']:
             item_state = external_state['items'][str(nearest_item_ids[0])]
-            distance_att_item = self.matrika.calculate_distance(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
-            direction_att_item = self.matrika.calculate_angle(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize=True)
+            distance_att_item = self.matrika.calculate_distance(attention_x, attention_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
+            direction_att_item = self.matrika.calculate_angle(attention_x, attention_y, item_state['x'], item_state['y'], normalize=True)
             state.extend([distance_att_item, direction_att_item])
         else:
             state.extend([0.0, 0.0])  # Pad with zeros if no nearest item
 
         # Add distance and direction from organism to attention point
-        # distance_org_att = self.matrika.calculate_distance(organism_x, organism_y, self.attention_x, self.attention_y, normalize_to_viewport=True)
-        # direction_org_att = self.matrika.calculate_angle(organism_x, organism_y, self.attention_x, self.attention_y, normalize=True)
-        # state.extend([distance_org_att, direction_org_att])
+        distance_org_att = self.matrika.calculate_distance(organism_x, organism_y, attention_x, attention_y, normalize_to_viewport=True)
+        direction_org_att = self.matrika.calculate_angle(organism_x, organism_y, attention_x, attention_y, normalize=True)
+        state.extend([distance_org_att, direction_org_att])
 
         return torch.tensor(state, dtype=torch.float32), nearest_item_ids
 
