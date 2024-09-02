@@ -98,7 +98,7 @@ class Organism:
         self.gamma: float = 0.9
         self.training_steps: int = 0
         self.target_update: int = 10
-        self.replay_buffer = PrioritizedExperienceReplay(capacity=10000, batch_size=32)
+        self.replay_buffer = PrioritizedExperienceReplay(capacity=100000, batch_size=64)
         self.batch_size: int = 32
         self.gradient_clip: float = 1.0
         
