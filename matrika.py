@@ -344,10 +344,13 @@ class Matrika:
         return True
 
     def spawn_organism(self, parent):
+        parent_state = self.current_state['organisms'][str(parent.id)]
+        parent_x, parent_y = parent_state['x'], parent_state['y']
+        
         dx = random.choice([-1, 0, 1])
         dy = random.choice([-1, 0, 1])
-        new_x = max(0, min(parent.x + dx, self.GRID_SIZE - 1))
-        new_y = max(0, min(parent.y + dy, self.GRID_SIZE - 1))
+        new_x = max(0, min(parent_x + dx, self.GRID_SIZE - 1))
+        new_y = max(0, min(parent_y + dy, self.GRID_SIZE - 1))
         
         new_organism = self.create_organism(parent.__class__, new_x, new_y)
         
