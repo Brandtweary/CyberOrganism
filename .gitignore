@@ -1,6 +1,5 @@
 # Personal files
 *.txt
-notes.txt
 
 # Python virtual environment
 .venv/
