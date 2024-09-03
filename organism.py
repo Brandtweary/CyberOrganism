@@ -324,41 +324,41 @@ class Organism:
             
             new_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y)
             
-            if new_distance > 2:
-                # Calculate proximity penalty
-                normalized_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
-                proximity_penalty = self.proximity_penalty(normalized_distance, method='exponential')
-                
-                # Calculate direction reward
-                attention_delta_x = new_attention_x - old_attention_x
-                attention_delta_y = new_attention_y - old_attention_y
+            # Calculate proximity reward
+            normalized_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
+            proximity_reward = 0.5 * (1 - 2 * normalized_distance)
+            
+            # Calculate direction reward
+            attention_delta_x = new_attention_x - old_attention_x
+            attention_delta_y = new_attention_y - old_attention_y
 
-                if attention_delta_x == 0 and attention_delta_y == 0:
-                    movement_angle = 0  # No movement
-                else:
-                    movement_angle = math.atan2(attention_delta_y, attention_delta_x)
-
-                target_delta_x = item_x - old_attention_x
-                target_delta_y = item_y - old_attention_y
-                target_angle = math.atan2(target_delta_y, target_delta_x)
-
-                angle_diff = math.atan2(math.sin(target_angle - movement_angle), math.cos(target_angle - movement_angle))
-
-                direction_reward = self.calculate_direction_reward(angle_diff)
-                
-                # Combine rewards
-                reward = proximity_penalty + direction_reward
+            if attention_delta_x == 0 and attention_delta_y == 0:
+                movement_angle = 0  # No movement
             else:
-                # Focus reward when close to the target
-                reward = 1.0  # Base reward for being close
+                movement_angle = math.atan2(attention_delta_y, attention_delta_x)
+
+            target_delta_x = item_x - old_attention_x
+            target_delta_y = item_y - old_attention_y
+            target_angle = math.atan2(target_delta_y, target_delta_x)
+
+            angle_diff = math.atan2(math.sin(target_angle - movement_angle), math.cos(target_angle - movement_angle))
+
+            direction_reward = self.calculate_direction_reward(angle_diff)
+            
+            # Combine rewards
+            reward = proximity_reward + direction_reward
+            
+            if new_distance <= 2:
+                reward += 1.0  # Additional reward for being close
                 
                 attention_movement = self.matrika.calculate_distance(old_attention_x, old_attention_y, new_attention_x, new_attention_y)
                 if attention_movement < 0.1:
                     reward += 1.0  # Additional reward for staying still when close
         else:
-            reward = -0.444  # Penalty if there's no nearest item
+            reward = -0.666  # Penalty if there's no nearest item
         
-        # Add the current_reward from food consumption        reward += self.current_reward
+        # Add the current_reward from food consumption
+        reward += self.current_reward
         self.current_reward = 0.0  # Reset the current_reward after incorporating it
         
         # Update reward history and average
@@ -366,45 +366,11 @@ class Organism:
         self.reward_avg = sum(self.reward_history) / len(self.reward_history)
         
         return reward
-
+    
     def calculate_direction_reward(self, angle_diff: float) -> float:
-        # Convert angle difference to degrees and take the absolute value
-        angle_diff_degrees = abs(math.degrees(angle_diff))
-        
-        # Define the range for positive rewards (±45 degrees)
-        positive_range = 45
-        
-        if angle_diff_degrees <= positive_range:
-            # Positive reward for angles within the correct range
-            # Scaled so that 0 degrees gives 1.0 and 45 degrees gives 0.0
-            return 1.0 - (angle_diff_degrees / positive_range)
-        else:
-            # Negative reward for angles outside the correct range
-            # Scaled so that 45 degrees gives 0.0 and 180 degrees gives -1.0
-            return -1.0 * (angle_diff_degrees - positive_range) / (180 - positive_range)
-
-
-    def proximity_penalty(self, normalized_distance, max_penalty=0.5, transition_start=0.2, transition_end=0.1, method='quadratic'):
-        def smooth_step(x):
-            # Smooth step function
-            x = max(0, min(1, (x - transition_end) / (transition_start - transition_end)))
-            return x * x * (3 - 2 * x)
-        
-        if method == 'quadratic':
-            # Quadratic penalty
-            penalty = max_penalty * (normalized_distance ** 2)
-        elif method == 'exponential':
-            # Exponential penalty
-            penalty = max_penalty * (math.exp(normalized_distance) - 1) / (math.e - 1)
-        else:
-            raise ValueError("Invalid method. Choose 'quadratic' or 'exponential'.")
-        
-        # Smooth step component
-        step_factor = smooth_step(normalized_distance)
-        
-        # Combine penalty and step components
-        return -penalty * step_factor
-
+        normalized_angle = (angle_diff + math.pi) % (2 * math.pi) - math.pi
+        reward = 0.5 * math.cos(normalized_angle)
+        return reward
 
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
         total_reward = self.calculate_rewards(old_state, new_state)
