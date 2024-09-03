@@ -445,18 +445,18 @@ class Organism:
         if not self.replay_buffer.can_sample():
             return
 
-        batch, idxs = self.replay_buffer.sample()  # No longer expecting weights
+        batch, idxs = self.replay_buffer.sample()  # idxs is now a tensor
         
-        self.optimizer.zero_grad()  # Zero gradients at the start
+        self.optimizer.zero_grad()
         total_loss = 0
         total_q_value = 0
         total_expected_q_value = 0
         
-        for experience in batch:
+        for i, experience in enumerate(batch):
             state, action, reward, next_state = experience
             
-            state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-            next_state = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0)
+            state = state.unsqueeze(0)
+            next_state = next_state.unsqueeze(0)
             action = torch.tensor([action], dtype=torch.long)
             reward = torch.tensor([reward], dtype=torch.float32)
 
@@ -480,9 +480,9 @@ class Organism:
             total_q_value += current_q_values.item()
             total_expected_q_value += expected_q_values.item()
 
-            # Compute TD error for updating priorities
+            # Use the index i to get the corresponding idx from idxs tensor
             td_error = abs(current_q_values.item() - expected_q_values.item())
-            self.replay_buffer.update_priorities([idxs[batch.index(experience)]], [td_error])
+            self.replay_buffer.update_priorities([idxs[i]], [td_error])
 
         # Clip gradients
         torch.nn.utils.clip_grad_norm_(self.dqn.policy_net.parameters(), max_norm=self.gradient_clip)
