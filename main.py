@@ -158,6 +158,7 @@ def run_simulation(screen, clock, font, sim_state):
     draw_times = []
     total_frame_times = []
     frame_count = 0
+    window_count = 0
     
     while running:
         for event in pygame.event.get():
@@ -213,6 +214,8 @@ def run_simulation(screen, clock, font, sim_state):
             print(f"Avg Update time: {avg_update_time*1000:.2f}ms")
             print(f"Avg Draw time: {avg_draw_time*1000:.2f}ms")
             print(f"Avg Total frame time: {avg_total_frame_time*1000:.2f}ms")
+            current_overall_avg = sum(sim_state.avg_update_times) / len(sim_state.avg_update_times)
+            print(f"Current overall avg update time: {current_overall_avg*1000:.2f}ms")  # For debugging
             print("--------------------")
             
             last_print_time = current_time
