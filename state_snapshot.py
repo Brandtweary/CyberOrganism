@@ -1,8 +1,12 @@
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from uuid import UUID
 import math
 import copy
+from enum import Enum
 
+class ObjectType(Enum):
+    ITEM = 'item'
+    ORGANISM = 'organism'
 
 class StateSnapshot:
     def __init__(self, matrika, current_time: float, grid_size: int):
@@ -19,8 +23,20 @@ class StateSnapshot:
     def get_state(self, uuid: UUID) -> Optional[Dict[str, Any]]:
         return self._state['object_states'].get(uuid)
     
-    def get_objects_in_snapshot(self):
-        return self._state['object_states'].items()
+    def get_objects_in_snapshot(self, filter_type: Optional[ObjectType] = None) -> List[Tuple[UUID, Dict[str, Any]]]:
+        filtered_objects = []
+        for uuid, state in self._state['object_states'].items():
+            if uuid in self.matrika.organisms:
+                if filter_type is None or filter_type == ObjectType.ORGANISM:
+                    filtered_objects.append((uuid, state))
+            elif uuid in self.matrika.items:
+                if filter_type is None or filter_type == ObjectType.ITEM:
+                    filtered_objects.append((uuid, state))
+            else:
+                # Object should have been deleted, mark it for deletion
+                state['marked_for_deletion'] = True
+        
+        return filtered_objects
     
     def add_state(self, uuid: UUID, state: Dict[str, Any]):
         self._state['object_states'][uuid] = state
