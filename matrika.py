@@ -89,51 +89,60 @@ class Matrika:
             'marked_for_deletion': False
         })
 
-    def create_item(self, item_class: type, x: int, y: int, **kwargs) -> Optional[Any]:
-        if 0 <= x < self.GRID_SIZE and 0 <= y < self.GRID_SIZE:
-            new_item = item_class(**kwargs)
-            self.items.append(new_item)
-            # Add the new item to the current state
-            self.current_state.update_item_state(new_item.id, {
-                'x': x,
-                'y': y,
-                'type': type(new_item).__name__,
-                'energy': new_item.energy,
-                'nutrition': new_item.nutrition,
-                'expiration_timer': new_item.expiration_timer,
-                'reward': new_item.reward,
-                'marked_for_deletion': False,
-                'color': new_item.color  # Add color to the state
-            })
-            return new_item
-        else:
-            return None
+    def create_item(self, item_class: type, x: int, y: int, state_snapshot: StateSnapshot, **kwargs) -> Optional[Any]:
+        x, y = self.get_nearest_empty_position(x, y, state_snapshot)
+        new_item = item_class(self, (x, y), **kwargs)
+        self.items.append(new_item)
         
-    def create_organism(self, organism_class: type, x: int, y: int) -> Optional[Any]:
-        if 0 <= x < self.GRID_SIZE and 0 <= y < self.GRID_SIZE:
-            new_organism = organism_class(self, (x, y))  # Pass self (Matrika instance) and initial position
-            self.organisms.append(new_organism)
-            # Add the new organism to the current state
-            self.current_state.update_organism_state(new_organism.id, {
-                'x': x,
-                'y': y,
-                'marked_for_deletion': False,
-                'attention_point': (x, y)  # Initialize attention point at organism's position
-            })
-            return new_organism 
-        else:
-            return None
+        state_snapshot.add_state(new_item.id, {})
+        state_snapshot.update_state_params(new_item, new_item.id)
+        
+        return new_item
+        
+    def create_organism(self, organism_class: type, x: int, y: int, state_snapshot: StateSnapshot, **kwargs) -> Optional[Any]:
+        x, y = self.get_nearest_empty_position(x, y, state_snapshot)
+        new_organism = organism_class(self, (x, y), **kwargs)
+        self.organisms.append(new_organism)
+        
+        state_snapshot.add_state(new_organism.id, {})
+        state_snapshot.update_state_params(new_organism, new_organism.id)
+        
+        return new_organism
 
-    def is_cell_empty(self, x: int, y: int) -> bool:
+    def is_cell_empty(self, x: int, y: int, state_snapshot: StateSnapshot) -> bool:
         return not any(
-            (item_state['x'] == x and item_state['y'] == y and not item_state.get('marked_for_deletion', False))
-            for item_id, item_state in self.current_state.get_objects_in_snapshot()
-            if item_state.get('type') == 'Food'
-        ) and not any(
-            (org_state['x'] == x and org_state['y'] == y and not org_state.get('marked_for_deletion', False))
-            for org_id, org_state in self.current_state.get_objects_in_snapshot()
-            if 'type' not in org_state  # Assuming organisms don't have a 'type' field
+            (obj_state['x'] == x and obj_state['y'] == y and not obj_state.get('marked_for_deletion', False))
+            for _, obj_state in state_snapshot.get_objects_in_snapshot()
         )
+
+    def get_nearest_empty_position(self, x: int, y: int, state_snapshot: StateSnapshot) -> Tuple[int, int]:
+        # Ensure the position is within the grid
+        x = max(0, min(x, self.world_width - 1))
+        y = max(0, min(y, self.world_height - 1))
+        
+        if self.is_cell_empty(x, y, state_snapshot):
+            return x, y
+        
+        # If the cell is occupied, find the nearest empty cell
+        directions = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+        random.shuffle(directions)
+        
+        for dx, dy in directions:
+            distance = 1
+            while True:
+                new_x = x + dx * distance
+                new_y = y + dy * distance
+                
+                if not (0 <= new_x < self.world_width and 0 <= new_y < self.world_height):
+                    break  # Out of bounds, try next direction
+                
+                if self.is_cell_empty(new_x, new_y, state_snapshot):
+                    return new_x, new_y
+                
+                distance += 1
+        
+        # If no empty cell found, return None or raise an exception
+        raise ValueError("No empty cell found in the entire grid")
 
     def find_empty_random_cell_near(self, x: int, y: int, max_attempts: int = 10) -> Optional[Tuple[int, int]]:
         for _ in range(max_attempts):
@@ -228,16 +237,16 @@ class Matrika:
                         'color': new_food.color
                     })
 
-    def spawn_organism(self, parent: Any) -> Optional[Any]:
-        parent_state = self.current_state.get_state(parent.id)
+    def spawn_organism(self, parent: Any, state_snapshot: StateSnapshot) -> Optional[Any]:
+        parent_state = state_snapshot.get_state(parent.id)
         parent_x, parent_y = parent_state['x'], parent_state['y']
         
         dx = random.choice([-1, 0, 1])
         dy = random.choice([-1, 0, 1])
-        new_x = max(0, min(parent_x + dx, self.GRID_SIZE - 1))
-        new_y = max(0, min(parent_y + dy, self.GRID_SIZE - 1))
+        new_x = max(0, min(parent_x + dx, self.world_width - 1))
+        new_y = max(0, min(parent_y + dy, self.world_height - 1))
         
-        new_organism = self.create_organism(parent.__class__, new_x, new_y)
+        new_organism = self.create_organism(parent.__class__, new_x, new_y, state_snapshot)
         
         if new_organism:
             new_organism.clone(parent)

@@ -21,6 +21,9 @@ class StateSnapshot:
     
     def get_objects_in_snapshot(self):
         return self._state['object_states'].items()
+    
+    def add_state(self, uuid: UUID, state: Dict[str, Any]):
+        self._state['object_states'][uuid] = state
 
     def update_state(self, uuid: UUID, state: Dict[str, Any]):
         self._state['object_states'][uuid] = state
@@ -108,15 +111,15 @@ class StateSnapshot:
         pass
 
     def process_organism_state_change_dict(self, org_id, change_dict, organism):
+        org_state = self.get_state(org_id)
         for key, value in change_dict.items():
             method_name = f"process_{key}"
             if hasattr(self, method_name):
-                getattr(self, method_name)(org_id, value, organism)
+                getattr(self, method_name)(org_id, value, organism, org_state)
             else:
                 print(f"Warning: No method to process {key}")
 
-    def process_movement_vector(self, org_id: UUID, movement_vector, organism):
-        org_state = self.get_state(org_id)
+    def process_movement_vector(self, org_id: UUID, movement_vector, organism, org_state):
         dx, dy = movement_vector
         new_x = max(0, min(org_state['x'] + dx, self.matrika.world_width - 1))
         new_y = max(0, min(org_state['y'] + dy, self.matrika.world_height - 1))
@@ -133,8 +136,7 @@ class StateSnapshot:
                     if item_state:
                         item_state['marked_for_deletion'] = True
 
-    def process_attention_vector(self, org_id: UUID, attention_vector, organism):
-        org_state = self.get_state(org_id)
+    def process_attention_vector(self, org_id: UUID, attention_vector, organism, org_state):
         current_org_x, current_org_y = org_state['x'], org_state['y']
         current_attention_x, current_attention_y = org_state.get('attention_point', (current_org_x, current_org_y))
         dx, dy = attention_vector
@@ -154,6 +156,13 @@ class StateSnapshot:
             constrained_x = max(0, min(constrained_x, self.matrika.world_width - 1))
             constrained_y = max(0, min(constrained_y, self.matrika.world_height - 1))
             org_state['attention_point'] = (constrained_x, constrained_y)
+    
+    def process_alive(self, org_id: UUID, alive: bool, organism, org_state):
+        org_state['marked_for_deletion'] = not alive
+
+    def process_spawn(self, org_id: UUID, should_spawn: bool, organism, org_state):
+        if should_spawn:
+            self.matrika.spawn_organism(organism, self)
 
     def handle_collision(self, x: float, y: float, organism) -> List[Any]:
         collision_objects = []

@@ -68,6 +68,7 @@ class Organism:
         self.y: float = initial_position[1]
         self.attention_x: float = initial_position[0]
         self.attention_y: float = initial_position[1]
+        self.marked_for_deletion: bool = False
         self.energy: float = 5.0
         self.nutrition: float = 0.0
         self.loss_avg: float = 0.0
