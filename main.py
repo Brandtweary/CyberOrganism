@@ -17,7 +17,7 @@ def main():
 
     # Create the test organism at the center of the grid
     initial_x, initial_y = matrika.GRID_SIZE // 2, matrika.GRID_SIZE // 2
-    test_organism = matrika.create_organism(Organism, initial_x, initial_y)
+    test_organism = matrika.create_organism(Organism, (initial_x, initial_y), matrika.current_state)
     matrika.test_organism = test_organism
 
     sim_state = SimulationState(matrika)

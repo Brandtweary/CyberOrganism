@@ -8,9 +8,9 @@ from items import Food
 from food_spawners import FoodSpawner
 from collections import deque
 from state_snapshot import StateSnapshot
-import copy
 from typing import List, Tuple, Optional, Union, Any
 from uuid import UUID
+
 
 class Matrika:
     def __init__(self):
@@ -46,13 +46,9 @@ class Matrika:
         self.state_history = deque(maxlen=100)  # Adjust maxlen as needed
         self.current_state = StateSnapshot(self, current_time=time.time(), grid_size=self.GRID_SIZE)
 
-        self.food_spawners = []
         self.items = []
         self.organisms = []
         self.test_organism = None
-        self.visible_cells = []
-
-        self.update_visible_cells()
         self.initialize_food_spawners()
 
     def initialize_food_spawners(self):
@@ -74,23 +70,19 @@ class Matrika:
         spawn_frequency = 0.5
         entropy = 0.2
 
-        self.create_food_spawner(center_x, center_y, regular_food_params, high_energy_food_params, 
-                                   spawn_frequency=spawn_frequency, 
-                                   spawn_range=spawn_range, 
-                                   entropy=entropy)
+        self.create_item(
+            FoodSpawner,
+            (center_x, center_y),
+            self.current_state,
+            spawn_frequency=spawn_frequency,
+            regular_food_params=regular_food_params,
+            high_energy_food_params=high_energy_food_params,
+            spawn_range=spawn_range,
+            entropy=entropy
+        )
 
-    def create_food_spawner(self, x: int, y: int, regular_food_params: dict, high_energy_food_params: dict, spawn_frequency: float = 0.5, spawn_range: int = 20, entropy: float = 0.2) -> None:
-        spawner = FoodSpawner(spawn_frequency, regular_food_params, high_energy_food_params, spawn_range, entropy, matrika=self)
-        self.food_spawners.append(spawner)
-        # Add the new spawner to the current state
-        self.current_state.update_food_spawner_state(spawner.id, {
-            'x': x,
-            'y': y,
-            'marked_for_deletion': False
-        })
-
-    def create_item(self, item_class: type, x: int, y: int, state_snapshot: StateSnapshot, **kwargs) -> Optional[Any]:
-        x, y = self.get_nearest_empty_position(x, y, state_snapshot)
+    def create_item(self, item_class: type, position: Tuple[int, int], state_snapshot: StateSnapshot, *args, **kwargs) -> Optional[Any]:
+        x, y = self.get_nearest_empty_position(position[0], position[1], state_snapshot)
         new_item = item_class(self, (x, y), **kwargs)
         self.items.append(new_item)
         
@@ -99,8 +91,8 @@ class Matrika:
         
         return new_item
         
-    def create_organism(self, organism_class: type, x: int, y: int, state_snapshot: StateSnapshot, **kwargs) -> Optional[Any]:
-        x, y = self.get_nearest_empty_position(x, y, state_snapshot)
+    def create_organism(self, organism_class: type, position: Tuple[int, int], state_snapshot: StateSnapshot, *args, **kwargs) -> Optional[Any]:
+        x, y = self.get_nearest_empty_position(position[0], position[1], state_snapshot)
         new_organism = organism_class(self, (x, y), **kwargs)
         self.organisms.append(new_organism)
         
@@ -111,7 +103,9 @@ class Matrika:
 
     def is_cell_empty(self, x: int, y: int, state_snapshot: StateSnapshot) -> bool:
         return not any(
-            (obj_state['x'] == x and obj_state['y'] == y and not obj_state.get('marked_for_deletion', False))
+            (obj_state['x'] == x and obj_state['y'] == y and 
+             not obj_state.get('marked_for_deletion', False) and
+             obj_state.get('collision', True))
             for _, obj_state in state_snapshot.get_objects_in_snapshot()
         )
 
@@ -144,16 +138,6 @@ class Matrika:
         # If no empty cell found, return None or raise an exception
         raise ValueError("No empty cell found in the entire grid")
 
-    def find_empty_random_cell_near(self, x: int, y: int, max_attempts: int = 10) -> Optional[Tuple[int, int]]:
-        for _ in range(max_attempts):
-            dx = np.random.randint(-1, 2)
-            dy = np.random.randint(-1, 2)
-            new_x = max(0, min(x + dx, self.GRID_SIZE - 1))
-            new_y = max(0, min(y + dy, self.GRID_SIZE - 1))
-            if self.is_cell_empty(new_x, new_y):
-                return new_x, new_y
-        return None
-
     def update_viewport(self, dx: int = 0, dy: int = 0) -> None:
         self.viewport_center_x = max(self.viewport_width // 2, 
                                      min(self.viewport_center_x + dx, 
@@ -163,23 +147,6 @@ class Matrika:
                                          self.world_height - self.viewport_height // 2))
         
         self.last_viewport_update_time = time.time()
-        self.update_visible_cells()
-
-    def update_visible_cells(self) -> None:
-        self.visible_cells = []
-        
-        viewport_left = int(self.viewport_center_x - self.viewport_width // 2)
-        viewport_top = int(self.viewport_center_y - self.viewport_height // 2)
-        
-        for x in range(viewport_left, viewport_left + int(self.viewport_width)):
-            for y in range(viewport_top, viewport_top + int(self.viewport_height)):
-                if 0 <= x < self.world_width and 0 <= y < self.world_height:
-                    self.visible_cells.append((x, y))
-
-    def get_random_visible_cell(self) -> Optional[Tuple[int, int]]:
-        if not self.visible_cells:
-            return None
-        return random.choice(self.visible_cells)
 
     def update_simulation(self) -> None:
         new_state: StateSnapshot = self.current_state.clone_state_snapshot()
@@ -188,7 +155,6 @@ class Matrika:
         # Update all components using the new mutable state
         self.update_all_organisms(new_state)
         self.update_all_items(new_state)
-        self.update_food_spawners(new_state)
 
         # Apply the new state
         self.apply_simulation_state(self.current_state, new_state)
@@ -215,28 +181,6 @@ class Matrika:
     def update_all_items(self, new_state: StateSnapshot) -> None:
         new_state.update_snapshot_with_items(self.items)
 
-    def update_food_spawners(self, new_state: StateSnapshot) -> None:
-        current_time = time.time()
-        food_count = sum(1 for item in self.items if isinstance(item, Food))
-        for spawner in self.food_spawners:
-            spawner_state = new_state.get_state(spawner.id)
-            if spawner_state and food_count < self.MAX_FOOD_ITEMS and spawner.should_spawn(current_time):
-                spawn_result = spawner.spawn_food(spawner_state['x'], spawner_state['y'])
-                if spawn_result:
-                    new_food, spawn_x, spawn_y = spawn_result
-                    food_count += 1
-                    new_state.update_item_state(new_food.id, {
-                        'x': spawn_x,
-                        'y': spawn_y,
-                        'type': type(new_food).__name__,
-                        'energy': new_food.energy,
-                        'nutrition': new_food.nutrition,
-                        'expiration_timer': new_food.expiration_timer,
-                        'reward': new_food.reward,
-                        'marked_for_deletion': False,
-                        'color': new_food.color
-                    })
-
     def spawn_organism(self, parent: Any, state_snapshot: StateSnapshot) -> Optional[Any]:
         parent_state = state_snapshot.get_state(parent.id)
         parent_x, parent_y = parent_state['x'], parent_state['y']
@@ -246,7 +190,7 @@ class Matrika:
         new_x = max(0, min(parent_x + dx, self.world_width - 1))
         new_y = max(0, min(parent_y + dy, self.world_height - 1))
         
-        new_organism = self.create_organism(parent.__class__, new_x, new_y, state_snapshot)
+        new_organism = self.create_organism(parent.__class__, (new_x, new_y), state_snapshot)
         
         if new_organism:
             new_organism.clone(parent)
@@ -288,15 +232,10 @@ class Matrika:
             if organism.id == organism_id:
                 return organism
         return None
-    
-    def get_food_spawner_by_ID(self, spawner_id: UUID) -> Optional[Any]:
-        return next((spawner for spawner in self.food_spawners if spawner.id == spawner_id), None)
-
 
     def get_object_by_ID(self, obj_id: UUID) -> Optional[Any]:
         return (self.get_item_by_ID(obj_id) or 
-                self.get_organism_by_ID(obj_id) or 
-                self.get_food_spawner_by_ID(obj_id))
+                self.get_organism_by_ID(obj_id))
     
     def remove_object(self, obj_id: UUID, state_snapshot: StateSnapshot) -> None:
         obj = self.get_object_by_ID(obj_id)
@@ -305,8 +244,6 @@ class Matrika:
                 self.items.remove(obj)
             elif obj in self.organisms:
                 self.organisms.remove(obj)
-            elif obj in self.food_spawners:
-                self.food_spawners.remove(obj)
         state_snapshot.remove_state(obj_id)
 
     def grid_to_screen(self, grid_x: int, grid_y: int) -> Tuple[int, int]:

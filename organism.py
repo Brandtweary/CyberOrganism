@@ -10,17 +10,11 @@ import copy
 from typing import Dict, Any, Tuple, List, Optional, Union
 import numpy as np
 from uuid import UUID, uuid4
-from state_snapshot import StateSnapshot
+from state_snapshot import StateSnapshot, ObjectType
 from enum import Enum
 from prioritized_experience_replay import PrioritizedExperienceReplay, Experience
+from enums import Action
 
-
-class Action(Enum):
-    UP = 0
-    DOWN = 1
-    LEFT = 2
-    RIGHT = 3
-    NO_MOVE = 4
 
 class DQNNetwork(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
@@ -51,7 +45,7 @@ class DQN(nn.Module):
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
 class Organism:
-    def __init__(self, matrika: Any, initial_position: Tuple[float, float]) -> None:
+    def __init__(self, matrika: Any, initial_position: Tuple[int, int]) -> None:
         self.id: UUID = uuid4()
         self.matrika = matrika
         self.input_parameters: List[str] = []
@@ -69,6 +63,9 @@ class Organism:
         self.attention_x: float = initial_position[0]
         self.attention_y: float = initial_position[1]
         self.marked_for_deletion: bool = False
+        self.type: ObjectType = ObjectType.ORGANISM
+        self.collision: bool = True
+        self.consumable: bool = False
         self.energy: float = 5.0
         self.nutrition: float = 0.0
         self.loss_avg: float = 0.0
@@ -115,6 +112,15 @@ class Organism:
         self.current_experience: Optional[Dict[str, Any]] = None
         self.current_reward: float = 0.0
         self.item_memory: List[UUID] = []
+
+        self.synchronized_params: List[str] = self._calculate_synchronized_params()
+
+    def _calculate_synchronized_params(self) -> List[str]:
+        return [
+            param for param, value in self.__dict__.items()
+            if isinstance(value, (int, float, UUID)) or 
+               (param.endswith('_ID') and value is None)
+        ]
 
     def clone(self: 'Organism', parent: 'Organism') -> None:
         self.dqn = copy.deepcopy(parent.dqn)
@@ -253,7 +259,7 @@ class Organism:
             return 0, 0
 
     def update_state(self, external_state: StateSnapshot) -> Dict[str, Any]:
-        internal_state, nearest_item_ids = self.get_internal_state(external_state)
+        internal_state = self.get_internal_state(external_state)
         action_index = self.select_attention_move(internal_state)
         attention_vector = self.update_attention_point(action_index)
         move_x, move_y = self.move(attention_vector)
@@ -279,7 +285,7 @@ class Organism:
     def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
         old_organism_state = old_state.get_state(self.id)
         
-        old_attention_x, old_attention_y = old_organism_state['attention_point']
+        old_attention_x, old_attention_y = old_organism_state['attention_x'], old_organism_state['attention_y']
         new_attention_x, new_attention_y = self.attention_x, self.attention_y
         
         nearest_item_id = self.nearest_item_id
@@ -335,7 +341,7 @@ class Organism:
 
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
         total_reward = self.calculate_rewards(old_state, new_state)
-        new_internal_state, _ = self.get_internal_state(new_state)
+        new_internal_state = self.get_internal_state(new_state)
         
         experience = Experience(
             state=self.current_experience['state'],

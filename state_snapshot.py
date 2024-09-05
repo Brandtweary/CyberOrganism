@@ -1,12 +1,9 @@
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Union
 from uuid import UUID
 import math
 import copy
-from enum import Enum
+from enums import ObjectType
 
-class ObjectType(Enum):
-    ITEM = 'item'
-    ORGANISM = 'organism'
 
 class StateSnapshot:
     def __init__(self, matrika, current_time: float, grid_size: int):
@@ -26,11 +23,9 @@ class StateSnapshot:
     def get_objects_in_snapshot(self, filter_type: Optional[ObjectType] = None) -> List[Tuple[UUID, Dict[str, Any]]]:
         filtered_objects = []
         for uuid, state in self._state['object_states'].items():
-            if uuid in self.matrika.organisms:
-                if filter_type is None or filter_type == ObjectType.ORGANISM:
-                    filtered_objects.append((uuid, state))
-            elif uuid in self.matrika.items:
-                if filter_type is None or filter_type == ObjectType.ITEM:
+            obj = self.matrika.get_object_by_ID(uuid)
+            if obj:
+                if filter_type is None or obj.type == filter_type:
                     filtered_objects.append((uuid, state))
             else:
                 # Object should have been deleted, mark it for deletion
@@ -58,7 +53,8 @@ class StateSnapshot:
         if state is None:
             raise KeyError(f"No state found for UUID: {uuid}")
         
-        for param, value in instance.__dict__.items():
+        for param in instance.synchronized_params:
+            value = getattr(instance, param)
             if param not in state or state[param] != value:
                 state[param] = value
         
@@ -69,8 +65,9 @@ class StateSnapshot:
         if state is None:
             raise KeyError(f"No state found for UUID: {uuid}")
         
-        for param, value in state.items():
-            setattr(instance, param, value)
+        for param in instance.synchronized_params:
+            if param in state:
+                setattr(instance, param, state[param])
 
     @property
     def grid_size(self):
@@ -101,6 +98,7 @@ class StateSnapshot:
 
         # Process state changes
         for item_id, change_dict in state_changes.items():
+            item = next(i for i in items if i.id == item_id)
             self.process_item_state_change_dict(item_id, change_dict, item)
 
     def update_snapshot_with_organisms(self, organisms: List[Any]):
@@ -119,12 +117,24 @@ class StateSnapshot:
             self.update_state_params(organism, organism.id)
 
         # Process state changes
+        
         for org_id, change_dict in state_changes.items():
+            organism = next(org for org in organisms if org.id == org_id)
             self.process_organism_state_change_dict(org_id, change_dict, organism)
 
+
     def process_item_state_change_dict(self, item_id, change_dict, item):
-        # Currently, this method does nothing as items don't produce state changes
-        pass
+        item_state = self.get_state(item_id)
+        for key, value in change_dict.items():
+            method_name = f"process_{key}"
+            if hasattr(self, method_name):
+                getattr(self, method_name)(item_id, value, item, item_state)
+            else:
+                print(f"Warning: No method to process {key}")
+
+    def process_spawn_food(self, item_id, spawn_food: bool, item, item_state):
+        if spawn_food:
+            item.spawn_food(self)
 
     def process_organism_state_change_dict(self, org_id, change_dict, organism):
         org_state = self.get_state(org_id)
@@ -146,7 +156,8 @@ class StateSnapshot:
             org_state['y'] = new_y
         else:
             for obj in collision_objects:
-                if isinstance(obj, self.matrika.Food):  # Assuming Food is a class in Matrika
+                # Check if the object is consumable
+                if obj.consumable:
                     obj.consume(organism)
                     item_state = self.get_state(obj.id)
                     if item_state:
@@ -182,19 +193,14 @@ class StateSnapshot:
 
     def handle_collision(self, x: float, y: float, organism) -> List[Any]:
         collision_objects = []
-        for item_id, item_state in self.object_states.items():
-            if (self.matrika.calculate_distance(x, y, item_state['x'], item_state['y']) <= self.matrika.collision_range
-                and not item_state.get('marked_for_deletion', False)):
-                item = self.matrika.get_item_by_ID(item_id)
-                if item:
-                    collision_objects.append(item)
-        
-        for org_id, org_state in self.object_states.items():
-            if (org_id != organism.id 
-                and self.matrika.calculate_distance(x, y, org_state['x'], org_state['y']) <= self.matrika.collision_range
-                and not org_state.get('marked_for_deletion', False)):
-                collision_org = self.matrika.get_organism_by_ID(org_id)
-                if collision_org:
-                    collision_objects.append(collision_org)
+        for obj_id, obj_state in self.object_states.items():
+            if (obj_id != organism.id and
+                self.matrika.calculate_distance(x, y, obj_state['x'], obj_state['y']) <= self.matrika.collision_range and
+                not obj_state.get('marked_for_deletion', False) and
+                obj_state.get('collision', True)):
+                
+                obj = self.matrika.get_object_by_ID(obj_id)
+                if obj:
+                    collision_objects.append(obj)
         
         return collision_objects
