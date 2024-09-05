@@ -53,6 +53,7 @@ class Organism:
             'organism_attention_distance',
             'organism_attention_direction'
         ]
+        self._set_input_parameters()  # all default to 0.0
         self.display_parameters: List[str] = [
             'energy',
             'nutrition',
@@ -119,6 +120,10 @@ class Organism:
 
         self.synchronized_params: List[str] = []
         self.param_count: int = 0
+    
+    def _set_input_parameters(self) -> None:
+        for param in self.input_parameters:
+            self.__setattr__(param, 0.0)
 
     def clone(self: 'Organism', parent: 'Organism') -> None:
         self.dqn = copy.deepcopy(parent.dqn)
