@@ -3,6 +3,7 @@ from uuid import UUID
 import math
 import copy
 from enums import ObjectType
+from shared_resources import update_state_params
 
 
 class StateSnapshot:
@@ -48,18 +49,6 @@ class StateSnapshot:
     def update_grid_size(self, new_grid_size: int):
         self._state['grid_size'] = new_grid_size
 
-    def update_state_params(self, instance: Any, uuid: UUID):
-        state = self.get_state(uuid)
-        if state is None:
-            raise KeyError(f"No state found for UUID: {uuid}")
-        
-        for param in instance.synchronized_params:
-            value = getattr(instance, param)
-            if param not in state or state[param] != value:
-                state[param] = value
-        
-        self.update_state(uuid, state)
-
     def apply_state_params(self, instance: Any, uuid: UUID):
         state = self.get_state(uuid)
         if state is None:
@@ -94,7 +83,7 @@ class StateSnapshot:
 
         # Update item states
         for item in items:
-            self.update_state_params(item, item.id)
+            self.update_instance_state(item, item.id)
 
         # Process state changes
         for item_id, change_dict in state_changes.items():
@@ -114,10 +103,9 @@ class StateSnapshot:
 
         # Update organism states
         for organism in organisms:
-            self.update_state_params(organism, organism.id)
+            self.update_instance_state(organism, organism.id)
 
         # Process state changes
-        
         for org_id, change_dict in state_changes.items():
             organism = next(org for org in organisms if org.id == org_id)
             self.process_organism_state_change_dict(org_id, change_dict, organism)
@@ -204,3 +192,15 @@ class StateSnapshot:
                     collision_objects.append(obj)
         
         return collision_objects
+
+    def update_instance_state(self, instance: Any, uuid: UUID):
+        state = self.get_state(uuid)
+        if state is None:
+            raise KeyError(f"No state found for UUID: {uuid}")
+        
+        # Check if the parameter count has changed
+        recalculate = not hasattr(instance, 'param_count') or len(state) != instance.param_count
+        
+        update_state_params(instance, state, recalculate)
+        
+        self.update_state(uuid, state)
