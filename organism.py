@@ -11,7 +11,6 @@ from typing import Dict, Any, Tuple, List, Optional, Union
 import numpy as np
 from uuid import UUID, uuid4
 from state_snapshot import StateSnapshot, ObjectType
-from enum import Enum
 from prioritized_experience_replay import PrioritizedExperienceReplay, Experience
 from enums import Action
 from shared_resources import calculate_synchronized_params
