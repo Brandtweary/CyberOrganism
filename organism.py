@@ -33,16 +33,16 @@ class DQNNetwork(nn.Module):
 class DQN(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
         super(DQN, self).__init__()
-        self.policy_net = DQNNetwork(input_size, hidden_size, output_size)
+        self.online_net = DQNNetwork(input_size, hidden_size, output_size)
         self.target_net = DQNNetwork(input_size, hidden_size, output_size)
-        self.target_net.load_state_dict(self.policy_net.state_dict())
+        self.target_net.load_state_dict(self.online_net.state_dict())
         self.target_net.eval()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.policy_net(x)
+        return self.online_net(x)
 
     def update_target_net(self) -> None:
-        self.target_net.load_state_dict(self.policy_net.state_dict())
+        self.target_net.load_state_dict(self.online_net.state_dict())
 
 class Organism:
     def __init__(self, SimulationEngine: Any, initial_position: Tuple[int, int]) -> None:
@@ -122,7 +122,7 @@ class Organism:
 
     def clone(self: 'Organism', parent: 'Organism') -> None:
         self.dqn = copy.deepcopy(parent.dqn)
-        self.optimizer = type(parent.optimizer)(self.dqn.policy_net.parameters(), 
+        self.optimizer = type(parent.optimizer)(self.dqn.online_net.parameters(), 
                                         lr=parent.optimizer.param_groups[0]['lr'])
         self.training_stats = TrainingStatistics(self.dqn, self.optimizer)
 
@@ -211,7 +211,7 @@ class Organism:
             action_index = random.randint(0, len(self.action_mapping) - 1)
         else:
             with torch.no_grad():
-                q_values = self.dqn.policy_net(state).squeeze()
+                q_values = self.dqn.online_net(state).squeeze()
             
             action_index = self.boltzmann_exploration(q_values)
         
@@ -396,7 +396,7 @@ class Organism:
             action = torch.tensor([action], dtype=torch.long)
             reward = torch.tensor([reward], dtype=torch.float32)
 
-            current_q_values = self.dqn.policy_net(state).gather(1, action.unsqueeze(1))
+            current_q_values = self.dqn.online_net(state).gather(1, action.unsqueeze(1))
 
             with torch.no_grad():
                 next_q_values = self.dqn.target_net(next_state).max(1)[0].detach()
@@ -414,7 +414,7 @@ class Organism:
             td_error = abs(current_q_values.item() - expected_q_values.item())
             self.replay_buffer.update_priorities([idxs[i]], [td_error])
 
-        torch.nn.utils.clip_grad_norm_(self.dqn.policy_net.parameters(), max_norm=self.gradient_clip)
+        torch.nn.utils.clip_grad_norm_(self.dqn.online_net.parameters(), max_norm=self.gradient_clip)
         
         self.optimizer.step()
 
