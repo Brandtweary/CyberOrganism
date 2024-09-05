@@ -13,7 +13,7 @@ from typing import List, Tuple, Optional, Union, Any
 from uuid import UUID
 
 
-class Matrika:
+class SimulationEngine:
     def __init__(self):
         self.GRID_SIZE = 7200
         self.CELL_SIZE = 10

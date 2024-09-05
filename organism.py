@@ -46,9 +46,9 @@ class DQN(nn.Module):
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
 class Organism:
-    def __init__(self, matrika: Any, initial_position: Tuple[int, int]) -> None:
+    def __init__(self, SimulationEngine: Any, initial_position: Tuple[int, int]) -> None:
         self.id: UUID = uuid4()
-        self.matrika = matrika
+        self.sim_engine = SimulationEngine
         self.input_parameters: List[str] = [
             'attention_item_distance',
             'attention_item_direction',
@@ -139,7 +139,7 @@ class Organism:
 
     def calculate_nearest_items_vector(self, external_state: StateSnapshot) -> List[float]:
         nearest_items_vector = []
-        nearest_item_ids = self.matrika.get_nearest_items(
+        nearest_item_ids = self.sim_engine.get_nearest_items(
             self.x, self.y, 
             self.max_nearest_items, 
             self.detection_radius,
@@ -157,8 +157,8 @@ class Organism:
         for item_id in nearest_item_ids:
             item_state = external_state.get_state(item_id)
             if item_state:
-                distance_org_item = self.matrika.calculate_distance(self.x, self.y, item_state['x'], item_state['y'], normalize_to_viewport=True)
-                direction_org_item = self.matrika.calculate_angle(self.x, self.y, item_state['x'], item_state['y'], normalize=True)
+                distance_org_item = self.sim_engine.calculate_distance(self.x, self.y, item_state['x'], item_state['y'], normalize_to_viewport=True)
+                direction_org_item = self.sim_engine.calculate_angle(self.x, self.y, item_state['x'], item_state['y'], normalize=True)
                 nearest_items_vector.extend([distance_org_item, direction_org_item, item_state['reward']])
 
         padding_length = (self.max_nearest_items - len(nearest_item_ids)) * self.nearest_item_params
@@ -170,8 +170,8 @@ class Organism:
         if self.nearest_item_ID:
             item_state = external_state.get_state(self.nearest_item_ID)
             if item_state:
-                self.attention_item_distance = self.matrika.calculate_distance(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
-                self.attention_item_direction = self.matrika.calculate_angle(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize=True)
+                self.attention_item_distance = self.sim_engine.calculate_distance(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
+                self.attention_item_direction = self.sim_engine.calculate_angle(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize=True)
             else:
                 self.attention_item_distance = 0.0
                 self.attention_item_direction = 0.0
@@ -180,8 +180,8 @@ class Organism:
             self.attention_item_direction = 0.0
 
     def calculate_organism_attention_parameters(self) -> None:
-        self.organism_attention_distance = self.matrika.calculate_distance(self.x, self.y, self.attention_x, self.attention_y, normalize_to_viewport=True)
-        self.organism_attention_direction = self.matrika.calculate_angle(self.x, self.y, self.attention_x, self.attention_y, normalize=True)
+        self.organism_attention_distance = self.sim_engine.calculate_distance(self.x, self.y, self.attention_x, self.attention_y, normalize_to_viewport=True)
+        self.organism_attention_direction = self.sim_engine.calculate_angle(self.x, self.y, self.attention_x, self.attention_y, normalize=True)
 
     def update_item_memory(self, nearest_item_ids: List[UUID]) -> None:
         """Update the item_memory list with new unique IDs."""
@@ -198,7 +198,7 @@ class Organism:
         for item_id in memory_copy:
             item_state = external_state.get_state(item_id)
             if item_state:
-                distance = self.matrika.calculate_distance(organism_x, organism_y, item_state['x'], item_state['y'])
+                distance = self.sim_engine.calculate_distance(organism_x, organism_y, item_state['x'], item_state['y'])
                 if distance < nearest_distance:
                     nearest_item = item_id
                     nearest_distance = distance
@@ -298,9 +298,9 @@ class Organism:
             item_state = new_state['items'][str(nearest_item_id)]
             item_x, item_y = item_state['x'], item_state['y']
             
-            new_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y)
+            new_distance = self.sim_engine.calculate_distance(new_attention_x, new_attention_y, item_x, item_y)
             
-            normalized_distance = self.matrika.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
+            normalized_distance = self.sim_engine.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
             proximity_reward = 0.5 * (1 - 2 * normalized_distance)
             
             attention_delta_x = new_attention_x - old_attention_x
@@ -324,7 +324,7 @@ class Organism:
             if new_distance <= 2:
                 reward += 1.0
                 
-                attention_movement = self.matrika.calculate_distance(old_attention_x, old_attention_y, new_attention_x, new_attention_y)
+                attention_movement = self.sim_engine.calculate_distance(old_attention_x, old_attention_y, new_attention_x, new_attention_y)
                 if attention_movement < 0.1:
                     reward += 1.0
         else:

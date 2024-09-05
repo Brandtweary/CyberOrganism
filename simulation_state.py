@@ -3,10 +3,10 @@ import time
 
 
 class SimulationState:
-    def __init__(self, matrika):
-        self.matrika = matrika
-        self.current_state = matrika.current_state
-        self.test_organism = matrika.test_organism
+    def __init__(self, SimulationEngine):
+        self.sim_engine = SimulationEngine
+        self.current_state = SimulationEngine.current_state
+        self.test_organism = SimulationEngine.test_organism
         self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
         self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
         self.cpu_usage = psutil.cpu_percent()
@@ -40,15 +40,15 @@ class SimulationState:
     def update(self):
         cycle_start_time = time.time()
         
-        self.matrika.update_simulation()
-        self.current_state = self.matrika.current_state
+        self.sim_engine.update_simulation()
+        self.current_state = self.sim_engine.current_state
         self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
         self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
         
         # Update summary statistics
         current_loss = self.display_parameters['loss_avg']
         if current_loss < 0.5:
-            self.time_low_loss += self.matrika.UPDATE_INTERVAL
+            self.time_low_loss += self.sim_engine.UPDATE_INTERVAL
         self.total_time = time.time() - self.start_time
         
         # Update performance metrics

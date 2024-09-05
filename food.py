@@ -3,8 +3,8 @@ from typing import Tuple
 
 
 class Food(Item):
-    def __init__(self, matrika, position: Tuple[int, int], energy=1.0, nutrition=0.1, color=(255, 255, 0), expiration_timer=60):
-        super().__init__(matrika, position)
+    def __init__(self, SimulationEngine, position: Tuple[int, int], energy=1.0, nutrition=0.1, color=(255, 255, 0), expiration_timer=60):
+        super().__init__(SimulationEngine, position)
         self.color = color
         self.expiration = True
         self.expiration_timer = expiration_timer

@@ -7,13 +7,13 @@ from shared_resources import update_state_params
 
 
 class StateSnapshot:
-    def __init__(self, matrika, current_time: float, grid_size: int):
+    def __init__(self, SimulationEngine, current_time: float, grid_size: int):
         self._state = {
             'object_states': {},
             'grid_size': grid_size,
             'time': current_time
         }
-        self.matrika = matrika
+        self.sim_engine = SimulationEngine
 
     def clone_state_snapshot(self) -> 'StateSnapshot':
         return copy.deepcopy(self)
@@ -24,7 +24,7 @@ class StateSnapshot:
     def get_objects_in_snapshot(self, filter_type: Optional[ObjectType] = None) -> List[Tuple[UUID, Dict[str, Any]]]:
         filtered_objects = []
         for uuid, state in self._state['object_states'].items():
-            obj = self.matrika.get_object_by_ID(uuid)
+            obj = self.sim_engine.get_object_by_ID(uuid)
             if obj:
                 if filter_type is None or obj.type == filter_type:
                     filtered_objects.append((uuid, state))
@@ -135,8 +135,8 @@ class StateSnapshot:
 
     def process_movement_vector(self, org_id: UUID, movement_vector, organism, org_state):
         dx, dy = movement_vector
-        new_x = max(0, min(org_state['x'] + dx, self.matrika.world_width - 1))
-        new_y = max(0, min(org_state['y'] + dy, self.matrika.world_height - 1))
+        new_x = max(0, min(org_state['x'] + dx, self.sim_engine.world_width - 1))
+        new_y = max(0, min(org_state['y'] + dy, self.sim_engine.world_height - 1))
         
         collision_objects = self.handle_collision(new_x, new_y, organism)
         if not collision_objects:
@@ -155,39 +155,39 @@ class StateSnapshot:
         current_org_x, current_org_y = org_state['x'], org_state['y']
         current_attention_x, current_attention_y = org_state.get('attention_x', current_org_x), org_state.get('attention_y', current_org_y)
         dx, dy = attention_vector
-        new_attention_x = max(0, min(current_attention_x + dx, self.matrika.world_width - 1))
-        new_attention_y = max(0, min(current_attention_y + dy, self.matrika.world_height - 1))
+        new_attention_x = max(0, min(current_attention_x + dx, self.sim_engine.world_width - 1))
+        new_attention_y = max(0, min(current_attention_y + dy, self.sim_engine.world_height - 1))
         
         detection_radius = organism.detection_radius
         
-        distance = self.matrika.calculate_distance(current_org_x, current_org_y, new_attention_x, new_attention_y)
+        distance = self.sim_engine.calculate_distance(current_org_x, current_org_y, new_attention_x, new_attention_y)
         
         if distance <= detection_radius:
             org_state['attention_x'] = new_attention_x
             org_state['attention_y'] = new_attention_y
         else:
-            angle = self.matrika.calculate_angle(current_org_x, current_org_y, new_attention_x, new_attention_y)
+            angle = self.sim_engine.calculate_angle(current_org_x, current_org_y, new_attention_x, new_attention_y)
             constrained_x = current_org_x + detection_radius * math.cos(angle)
             constrained_y = current_org_y + detection_radius * math.sin(angle)
-            org_state['attention_x'] = max(0, min(constrained_x, self.matrika.world_width - 1))
-            org_state['attention_y'] = max(0, min(constrained_y, self.matrika.world_height - 1))
+            org_state['attention_x'] = max(0, min(constrained_x, self.sim_engine.world_width - 1))
+            org_state['attention_y'] = max(0, min(constrained_y, self.sim_engine.world_height - 1))
     
     def process_alive(self, org_id: UUID, alive: bool, organism, org_state):
         org_state['marked_for_deletion'] = not alive
 
     def process_spawn(self, org_id: UUID, should_spawn: bool, organism, org_state):
         if should_spawn:
-            self.matrika.spawn_organism(organism, self)
+            self.sim_engine.spawn_organism(organism, self)
 
     def handle_collision(self, x: float, y: float, organism) -> List[Any]:
         collision_objects = []
         for obj_id, obj_state in self.object_states.items():
             if (obj_id != organism.id and
-                self.matrika.calculate_distance(x, y, obj_state['x'], obj_state['y']) <= self.matrika.collision_range and
+                self.sim_engine.calculate_distance(x, y, obj_state['x'], obj_state['y']) <= self.sim_engine.collision_range and
                 not obj_state.get('marked_for_deletion', False) and
                 obj_state.get('collision', True)):
                 
-                obj = self.matrika.get_object_by_ID(obj_id)
+                obj = self.sim_engine.get_object_by_ID(obj_id)
                 if obj:
                     collision_objects.append(obj)
         

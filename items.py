@@ -8,16 +8,16 @@ import inspect
 item_class_map = ()
 
 class Item:
-    def __init__(self, matrika, position: Tuple[int, int]):
+    def __init__(self, SimulationEngine, position: Tuple[int, int]):
         self.id = uuid4()
         self.x, self.y = position
-        self.matrika = matrika
+        self.sim_engine = SimulationEngine
         self.type: ObjectType = ObjectType.ITEM
         self.color = (255, 255, 255)  # Default color: white
         self.marked_for_deletion = False
         self.expiration = False
         self.expiration_timer = 60  # Default 60 seconds
-        self.update_interval = self.matrika.UPDATE_INTERVAL
+        self.update_interval = self.sim_engine.UPDATE_INTERVAL
         self.reward = 0.0
         self.energy = 0.0
         self.nutrition = 0.0

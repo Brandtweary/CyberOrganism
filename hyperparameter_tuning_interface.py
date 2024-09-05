@@ -1,12 +1,12 @@
-from matrika import Matrika
+from simulation_engine import SimulationEngine
 from organism import Organism
 import torch
 
 class HyperparameterTuningInterface:
     def __init__(self):
-        self.matrika = Matrika()
-        initial_x, initial_y = self.matrika.GRID_SIZE // 2, self.matrika.GRID_SIZE // 2
-        self.organism = self.matrika.create_organism(Organism, initial_x, initial_y)
+        self.sim_engine = SimulationEngine()
+        initial_x, initial_y = self.sim_engine.GRID_SIZE // 2, self.sim_engine.GRID_SIZE // 2
+        self.organism = self.sim_engine.create_organism(Organism, initial_x, initial_y)
         self.update_hyperparameters()
 
     def update_hyperparameters(self):
@@ -30,13 +30,13 @@ class HyperparameterTuningInterface:
         self.optimizer_params = getattr(getattr(self.organism, 'optimizer', None), 'defaults', None)
 
         # Environment parameters
-        self.grid_size = getattr(self.matrika, 'GRID_SIZE', None)
-        self.num_items = len(getattr(self.matrika, 'items', []))
+        self.grid_size = getattr(self.sim_engine, 'GRID_SIZE', None)
+        self.num_items = len(getattr(self.sim_engine, 'items', []))
         self.initial_energy = getattr(self.organism, 'energy', None)
         self.initial_nutrition = getattr(self.organism, 'nutrition', None)
         self.energy_consumption = getattr(self.organism, 'energy_consumption', None)
         self.nutrition_consumption = getattr(self.organism, 'nutrition_consumption', None)
-        self.food_replenishment_rate = getattr(self.matrika, 'FOOD_REPLENISHMENT_RATE', None)
+        self.food_replenishment_rate = getattr(self.sim_engine, 'FOOD_REPLENISHMENT_RATE', None)
 
         # Organism-specific parameters
         self.sensory_range = getattr(self.organism, 'detection_radius', None)
@@ -74,10 +74,10 @@ class HyperparameterTuningInterface:
         self.exploration_noise_params = getattr(self.organism, 'exploration_noise_params', None)
 
         # Maximum episode length: Limits the length of each training episode
-        self.max_episode_length = getattr(self.matrika, 'MAX_EPISODE_LENGTH', None)
+        self.max_episode_length = getattr(self.sim_engine, 'MAX_EPISODE_LENGTH', None)
 
         # Number of parallel environments: For parallelized training
-        self.num_parallel_envs = getattr(self.matrika, 'NUM_PARALLEL_ENVS', None)
+        self.num_parallel_envs = getattr(self.sim_engine, 'NUM_PARALLEL_ENVS', None)
 
         # Normalization parameters: For normalizing state/action spaces
         self.state_normalization_params = getattr(self.organism, 'state_normalization_params', None)
@@ -85,7 +85,7 @@ class HyperparameterTuningInterface:
 
     def print_all_hyperparameters(self):
         all_params = vars(self)
-        hyperparameters = {param: value for param, value in all_params.items() if param not in ['matrika', 'organism']}
+        hyperparameters = {param: value for param, value in all_params.items() if param not in ['SimulationEngine', 'organism']}
         
         print("=== Hyperparameters ===")
         print(f"Total number of hyperparameters: {len(hyperparameters)}")

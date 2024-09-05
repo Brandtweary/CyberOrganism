@@ -1,6 +1,6 @@
 import pygame
 from organism import Organism
-from matrika import Matrika
+from simulation_engine import SimulationEngine
 import time
 from drawing import draw_simulation
 from simulation_state import SimulationState
@@ -9,18 +9,18 @@ from simulation_state import SimulationState
 def main():
     pygame.init()
     
-    matrika = Matrika()  # Create Matrika instance
+    SimulationEngine = SimulationEngine()  # Create SimulationEngine instance
     
-    screen = pygame.display.set_mode((matrika.SCREEN_WIDTH, matrika.SCREEN_HEIGHT), pygame.FULLSCREEN)
+    screen = pygame.display.set_mode((SimulationEngine.SCREEN_WIDTH, SimulationEngine.SCREEN_HEIGHT), pygame.FULLSCREEN)
     clock = pygame.time.Clock()
     font = pygame.font.Font(None, 24)
 
     # Create the test organism at the center of the grid
-    initial_x, initial_y = matrika.GRID_SIZE // 2, matrika.GRID_SIZE // 2
-    test_organism = matrika.create_organism(Organism, (initial_x, initial_y), matrika.current_state)
-    matrika.test_organism = test_organism
+    initial_x, initial_y = SimulationEngine.GRID_SIZE // 2, SimulationEngine.GRID_SIZE // 2
+    test_organism = SimulationEngine.create_organism(Organism, (initial_x, initial_y), SimulationEngine.current_state)
+    SimulationEngine.test_organism = test_organism
 
-    sim_state = SimulationState(matrika)
+    sim_state = SimulationState(SimulationEngine)
     
     run_simulation(screen, clock, font, sim_state)
     
@@ -47,7 +47,7 @@ def run_simulation(screen, clock, font, sim_state):
 
         # Handle camera panning (60 FPS) only after 0.5 seconds
         if sim_state.total_time >= 0.5:
-            sim_state.matrika.handle_camera_panning()
+            sim_state.sim_engine.handle_camera_panning()
 
         # Update simulation (30 FPS)
         update_start_time = time.time()

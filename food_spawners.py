@@ -4,8 +4,8 @@ from items import Food, Item
 import uuid
 
 class FoodSpawner(Item):
-    def __init__(self, matrika, position, spawn_frequency, regular_food_params, high_energy_food_params, spawn_range, entropy):
-        super().__init__(matrika, position)
+    def __init__(self, SimulationEngine, position, spawn_frequency, regular_food_params, high_energy_food_params, spawn_range, entropy):
+        super().__init__(SimulationEngine, position)
         self.spawn_frequency = spawn_frequency
         self.regular_food_params = regular_food_params
         self.high_energy_food_params = high_energy_food_params
@@ -19,7 +19,7 @@ class FoodSpawner(Item):
 
     def calculate_spawn_delay(self):
         base_delay = 1 / self.spawn_frequency
-        food_count = len([item for item in self.matrika.items if isinstance(item, Food)])
+        food_count = len([item for item in self.sim_engine.items if isinstance(item, Food)])
         
         if food_count <= 3:
             base_delay /= 2  # Double the spawn rate by halving the delay
@@ -30,7 +30,7 @@ class FoodSpawner(Item):
     def should_spawn(self, current_time):
         # Check if it's time to spawn and if the maximum number of food items hasn't been reached
         return (current_time >= self.next_spawn_time and 
-                len([item for item in self.matrika.items if isinstance(item, Food)]) < self.matrika.MAX_FOOD_ITEMS)
+                len([item for item in self.sim_engine.items if isinstance(item, Food)]) < self.sim_engine.MAX_FOOD_ITEMS)
 
     def update_state(self, state_snapshot):
         current_time = time.time()
@@ -49,7 +49,7 @@ class FoodSpawner(Item):
         new_y = int(self.y + dy)
         
         # Find an empty cell near the calculated position
-        x, y = self.matrika.get_nearest_empty_position(new_x, new_y, state_snapshot)
+        x, y = self.sim_engine.get_nearest_empty_position(new_x, new_y, state_snapshot)
 
         if np.random.random() < 0.1:
             params = self.high_energy_food_params
@@ -61,4 +61,4 @@ class FoodSpawner(Item):
         energy = max(0.1, np.random.normal(params['energy'], self.entropy * params['energy']))
         nutrition = max(0.01, np.random.normal(params['nutrition'], self.entropy * params['nutrition']))
 
-        self.matrika.create_item(Food, (x, y), state_snapshot, energy=energy, nutrition=nutrition, color=color)
+        self.sim_engine.create_item(Food, (x, y), state_snapshot, energy=energy, nutrition=nutrition, color=color)
