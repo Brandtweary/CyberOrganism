@@ -4,7 +4,8 @@ import random
 import pygame
 import time
 import uuid
-from items import Food
+from items import Item, get_item_class
+from food import Food
 from food_spawners import FoodSpawner
 from collections import deque
 from state_snapshot import StateSnapshot
@@ -198,25 +199,16 @@ class Matrika:
         return new_organism
 
     def get_nearest_items(self, x: int, y: int, num_items: int, detection_radius: float, state_snapshot: StateSnapshot, item_type: Optional[str] = None, return_IDs: bool = False) -> Union[List[UUID], List[Any]]:
-        item_class_map = {
-            'food': Food
-        }
-        
-        filtered_items = [item for item in self.items if not item_type or isinstance(item, item_class_map.get(item_type.lower(), object))]
+        item_class = get_item_class(item_type) if item_type else object
         
         sorted_items = sorted(
-            [item for item in filtered_items if self.calculate_distance(x, y, 
-             state_snapshot.get_state(item.id)['x'], 
-             state_snapshot.get_state(item.id)['y']) <= detection_radius],
-            key=lambda item: self.calculate_distance(x, y, 
-                             state_snapshot.get_state(item.id)['x'], 
-                             state_snapshot.get_state(item.id)['y'])
-        )
+            [item for item in self.items 
+             if isinstance(item, item_class) and 
+             self.calculate_distance(x, y, state_snapshot.get_state(item.id)['x'], state_snapshot.get_state(item.id)['y']) <= detection_radius],
+            key=lambda item: self.calculate_distance(x, y, state_snapshot.get_state(item.id)['x'], state_snapshot.get_state(item.id)['y'])
+        )[:num_items]
         
-        if return_IDs:
-            return [item.id for item in sorted_items[:num_items]]
-        else:
-            return sorted_items[:num_items]
+        return [item.id for item in sorted_items] if return_IDs else sorted_items
     
     def item_exists(self, item_id: UUID) -> bool:
         return any(item.id == item_id for item in self.items)

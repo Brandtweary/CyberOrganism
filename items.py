@@ -1,8 +1,11 @@
 from uuid import UUID, uuid4
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Type
 from state_snapshot import StateSnapshot
 from enums import ObjectType
+from shared_resources import calculate_synchronized_params
+import inspect
 
+item_class_map = ()
 
 class Item:
     def __init__(self, matrika, position: Tuple[int, int]):
@@ -20,14 +23,7 @@ class Item:
         self.nutrition = 0.0
         self.collision = True  # New attribute for collision
         self.consumable = False
-        self.synchronized_params: List[str] = self._calculate_synchronized_params()
-
-    def _calculate_synchronized_params(self) -> List[str]:
-        return [
-            param for param, value in self.__dict__.items()
-            if isinstance(value, (int, float, UUID)) or 
-               (param.endswith('_ID') and value is None)
-        ]
+        self.synchronized_params: List[str] = calculate_synchronized_params(self)
 
     def consume(self, organism):
         pass
@@ -44,18 +40,12 @@ class Item:
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot):
        pass
 
-class Food(Item):
-    def __init__(self, matrika, position: Tuple[int, int], energy=1.0, nutrition=0.1, color=(255, 255, 0), expiration_timer=60):
-        super().__init__(matrika, position)
-        self.color = color
-        self.expiration = True
-        self.expiration_timer = expiration_timer
-        self.energy = energy
-        self.nutrition = nutrition
-        self.reward = energy + 5 * nutrition
-        self.consumable = True
+def get_all_item_subclasses() -> Dict[str, Type[Item]]:
+    item_classes = {}
+    for name, obj in globals().items():
+        if inspect.isclass(obj) and issubclass(obj, Item) and obj != Item:
+            item_classes[name.lower()] = obj
+    return item_classes
 
-    def consume(self, organism):
-        organism.energy += self.energy
-        organism.nutrition += self.nutrition
-        organism.current_reward += self.reward
+def get_item_class(item_type: str) -> Type[Item]:
+    return item_class_map.get(item_type.lower(), Item)
