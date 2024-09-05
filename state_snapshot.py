@@ -48,8 +48,8 @@ class StateSnapshot:
     def update_grid_size(self, new_grid_size: int):
         self._state['grid_size'] = new_grid_size
 
-    def calculate_synchronized_params(self, instance: Any, state: Dict[str, Any]) -> List[str]:
-        if not hasattr(instance, 'synchronized_params') or not hasattr(instance, 'param_count') or len(state) != instance.param_count:
+    def calculate_synchronized_params(self, instance: Any, state: Dict[str, Any], initial_calc: bool = False) -> List[str]:
+        if not hasattr(instance, 'synchronized_params') or not hasattr(instance, 'param_count') or len(state) != instance.param_count or initial_calc:
             synchronized_params = [
                 param for param, value in instance.__dict__.items()
                 if isinstance(value, (int, float, str, bool, tuple, UUID)) or 
@@ -61,11 +61,13 @@ class StateSnapshot:
 
     def update_state_params(self, instance: Any, uuid: UUID):
         state = self.get_state(uuid)
+        initial_calc = False
         if state is None:
             state = {}
             self.add_state(uuid, state)
+            initial_calc = True
         
-        synchronized_params = self.calculate_synchronized_params(instance, state)
+        synchronized_params = self.calculate_synchronized_params(instance, state, initial_calc)
         
         for param in synchronized_params:
             value = getattr(instance, param)
