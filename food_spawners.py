@@ -1,6 +1,7 @@
 import numpy as np
 import time
-from items import Food, Item
+from items import Item
+from food import Food
 import uuid
 
 class FoodSpawner(Item):
