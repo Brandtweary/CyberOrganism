@@ -15,6 +15,7 @@ class FoodSpawner(Item):
         self.collision = False
         self.update_interval = 0
         self.expiration = False
+        self.color = (0, 0, 0, 0)
 
     def calculate_spawn_delay(self):
         base_delay = 1 / self.spawn_frequency
