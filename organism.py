@@ -99,7 +99,7 @@ class Organism:
         output_size: int = len(self.action_mapping)
         self.dqn: DQN = DQN(input_size, hidden_size, output_size)
         self.optimizer: optim.Optimizer = optim.Adam(self.dqn.parameters(), lr=0.001)
-        self.gamma: float = 0.9
+        self.gamma: float = 0.99
         self.training_steps: int = 0
         self.target_update: int = 100
         self.batch_size: int = 4
