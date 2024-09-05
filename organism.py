@@ -357,7 +357,7 @@ class Organism:
         
         self.current_experience = None
         
-        self.train()
+        self.learn()
 
     def update_metabolism(self) -> Dict[str, Any]:
         self.energy -= self.energy_consumption
@@ -377,7 +377,7 @@ class Organism:
             return True
         return False
 
-    def train(self) -> None:
+    def learn(self) -> None:
         if not self.replay_buffer.can_sample():
             return
 
