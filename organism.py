@@ -14,6 +14,7 @@ from state_snapshot import StateSnapshot, ObjectType
 from enum import Enum
 from prioritized_experience_replay import PrioritizedExperienceReplay, Experience
 from enums import Action
+from shared_resources import calculate_synchronized_params
 
 
 class DQNNetwork(nn.Module):
@@ -113,14 +114,7 @@ class Organism:
         self.current_reward: float = 0.0
         self.item_memory: List[UUID] = []
 
-        self.synchronized_params: List[str] = self._calculate_synchronized_params()
-
-    def _calculate_synchronized_params(self) -> List[str]:
-        return [
-            param for param, value in self.__dict__.items()
-            if isinstance(value, (int, float, UUID)) or 
-               (param.endswith('_ID') and value is None)
-        ]
+        self.synchronized_params: List[str] = calculate_synchronized_params(self)
 
     def clone(self: 'Organism', parent: 'Organism') -> None:
         self.dqn = copy.deepcopy(parent.dqn)
