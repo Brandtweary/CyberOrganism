@@ -13,7 +13,6 @@ from uuid import UUID, uuid4
 from state_snapshot import StateSnapshot, ObjectType
 from prioritized_experience_replay import PrioritizedExperienceReplay, Experience
 from enums import Action
-from shared_resources import calculate_synchronized_params
 
 
 class DQNNetwork(nn.Module):
@@ -118,7 +117,8 @@ class Organism:
         self.current_reward: float = 0.0
         self.item_memory: List[UUID] = []
 
-        self.synchronized_params: List[str] = calculate_synchronized_params(self)
+        self.synchronized_params: List[str] = []
+        self.param_count: int = 0
 
     def clone(self: 'Organism', parent: 'Organism') -> None:
         self.dqn = copy.deepcopy(parent.dqn)

@@ -9,15 +9,15 @@ from simulation_state import SimulationState
 def main():
     pygame.init()
     
-    simulation_engine = SimulationEngine()  # Create SimulationEngine instance
+    simulation_engine = SimulationEngine()  # Create simulation_engine instance
     
-    screen = pygame.display.set_mode((SimulationEngine.SCREEN_WIDTH, SimulationEngine.SCREEN_HEIGHT), pygame.FULLSCREEN)
+    screen = pygame.display.set_mode((simulation_engine.SCREEN_WIDTH, simulation_engine.SCREEN_HEIGHT), pygame.FULLSCREEN)
     clock = pygame.time.Clock()
     font = pygame.font.Font(None, 24)
 
     # Create the test organism at the center of the grid
-    initial_x, initial_y = SimulationEngine.GRID_SIZE // 2, SimulationEngine.GRID_SIZE // 2
-    test_organism = simulation_engine.create_organism(Organism, (initial_x, initial_y), SimulationEngine.current_state)
+    initial_x, initial_y = simulation_engine.GRID_SIZE // 2, simulation_engine.GRID_SIZE // 2
+    test_organism = simulation_engine.create_organism(Organism, (initial_x, initial_y), simulation_engine.current_state)
     simulation_engine.test_organism = test_organism
 
     sim_state = SimulationState(simulation_engine)

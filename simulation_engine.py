@@ -87,7 +87,6 @@ class SimulationEngine:
         new_item = item_class(self, (x, y), **kwargs)
         self.items.append(new_item)
         
-        state_snapshot.add_state(new_item.id, {})
         state_snapshot.update_state_params(new_item, new_item.id)
         
         return new_item
@@ -97,7 +96,6 @@ class SimulationEngine:
         new_organism = organism_class(self, (x, y), **kwargs)
         self.organisms.append(new_organism)
         
-        state_snapshot.add_state(new_organism.id, {})
         state_snapshot.update_state_params(new_organism, new_organism.id)
         
         return new_organism

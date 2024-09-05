@@ -2,7 +2,6 @@ from uuid import UUID, uuid4
 from typing import Dict, Any, Tuple, List, Type
 from state_snapshot import StateSnapshot
 from enums import ObjectType
-from shared_resources import calculate_synchronized_params
 import inspect
 
 item_class_map = ()
@@ -23,7 +22,8 @@ class Item:
         self.nutrition = 0.0
         self.collision = True  # New attribute for collision
         self.consumable = False
-        self.synchronized_params: List[str] = calculate_synchronized_params(self)
+        self.synchronized_params: List[str] = []
+        self.param_count: int = 0
 
     def consume(self, organism):
         pass
