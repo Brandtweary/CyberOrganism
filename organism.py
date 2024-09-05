@@ -141,6 +141,7 @@ class Organism:
             organism_x, organism_y, 
             self.max_nearest_items, 
             self.detection_radius,
+            external_state,
             item_type='food',
             return_IDs=True
         )
@@ -288,7 +289,7 @@ class Organism:
         old_attention_x, old_attention_y = old_organism_state['attention_x'], old_organism_state['attention_y']
         new_attention_x, new_attention_y = self.attention_x, self.attention_y
         
-        nearest_item_id = self.nearest_item_id
+        nearest_item_id = self.nearest_item_ID
         
         if nearest_item_id and nearest_item_id in new_state['items']:
             item_state = new_state['items'][str(nearest_item_id)]

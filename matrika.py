@@ -197,7 +197,7 @@ class Matrika:
         
         return new_organism
 
-    def get_nearest_items(self, x: int, y: int, num_items: int, detection_radius: float, item_type: Optional[str] = None, return_IDs: bool = False) -> Union[List[UUID], List[Any]]:
+    def get_nearest_items(self, x: int, y: int, num_items: int, detection_radius: float, state_snapshot: StateSnapshot, item_type: Optional[str] = None, return_IDs: bool = False) -> Union[List[UUID], List[Any]]:
         item_class_map = {
             'food': Food
         }
@@ -206,11 +206,11 @@ class Matrika:
         
         sorted_items = sorted(
             [item for item in filtered_items if self.calculate_distance(x, y, 
-             self.current_state.get_state(item.id)['x'], 
-             self.current_state.get_state(item.id)['y']) <= detection_radius],
+             state_snapshot.get_state(item.id)['x'], 
+             state_snapshot.get_state(item.id)['y']) <= detection_radius],
             key=lambda item: self.calculate_distance(x, y, 
-                             self.current_state.get_state(item.id)['x'], 
-                             self.current_state.get_state(item.id)['y'])
+                             state_snapshot.get_state(item.id)['x'], 
+                             state_snapshot.get_state(item.id)['y'])
         )
         
         if return_IDs:
