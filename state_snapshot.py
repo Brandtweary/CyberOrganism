@@ -165,7 +165,7 @@ class StateSnapshot:
 
     def process_attention_vector(self, org_id: UUID, attention_vector, organism, org_state):
         current_org_x, current_org_y = org_state['x'], org_state['y']
-        current_attention_x, current_attention_y = org_state.get('attention_point', (current_org_x, current_org_y))
+        current_attention_x, current_attention_y = org_state.get('attention_x', current_org_x), org_state.get('attention_y', current_org_y)
         dx, dy = attention_vector
         new_attention_x = max(0, min(current_attention_x + dx, self.matrika.world_width - 1))
         new_attention_y = max(0, min(current_attention_y + dy, self.matrika.world_height - 1))
@@ -175,14 +175,14 @@ class StateSnapshot:
         distance = self.matrika.calculate_distance(current_org_x, current_org_y, new_attention_x, new_attention_y)
         
         if distance <= detection_radius:
-            org_state['attention_point'] = (new_attention_x, new_attention_y)
+            org_state['attention_x'] = new_attention_x
+            org_state['attention_y'] = new_attention_y
         else:
             angle = self.matrika.calculate_angle(current_org_x, current_org_y, new_attention_x, new_attention_y)
             constrained_x = current_org_x + detection_radius * math.cos(angle)
             constrained_y = current_org_y + detection_radius * math.sin(angle)
-            constrained_x = max(0, min(constrained_x, self.matrika.world_width - 1))
-            constrained_y = max(0, min(constrained_y, self.matrika.world_height - 1))
-            org_state['attention_point'] = (constrained_x, constrained_y)
+            org_state['attention_x'] = max(0, min(constrained_x, self.matrika.world_width - 1))
+            org_state['attention_y'] = max(0, min(constrained_y, self.matrika.world_height - 1))
     
     def process_alive(self, org_id: UUID, alive: bool, organism, org_state):
         org_state['marked_for_deletion'] = not alive
