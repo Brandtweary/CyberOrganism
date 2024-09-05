@@ -396,22 +396,22 @@ class Organism:
             action = torch.tensor([action], dtype=torch.long)
             reward = torch.tensor([reward], dtype=torch.float32)
 
-            current_q_values = self.dqn.online_net(state).gather(1, action.unsqueeze(1))
+            current_q_value = self.dqn.online_net(state).gather(1, action.unsqueeze(1))
 
             with torch.no_grad():
-                next_q_values = self.dqn.target_net(next_state).max(1)[0].detach()
+                next_q_value = self.dqn.target_net(next_state).max(1)[0].detach()
 
-            expected_q_values = reward + (self.gamma * next_q_values)
+            expected_q_value = reward + (self.gamma * next_q_value)
 
-            loss = F.smooth_l1_loss(current_q_values, expected_q_values.unsqueeze(1))
+            loss = F.smooth_l1_loss(current_q_value, expected_q_value.unsqueeze(1))
             
             loss.backward()
             
             total_loss += loss.item()
-            total_q_value += current_q_values.item()
-            total_expected_q_value += expected_q_values.item()
+            total_q_value += current_q_value.item()
+            total_expected_q_value += expected_q_value.item()
 
-            td_error = abs(current_q_values.item() - expected_q_values.item())
+            td_error = abs(current_q_value.item() - expected_q_value.item())
             self.replay_buffer.update_priorities([idxs[i]], [td_error])
 
         torch.nn.utils.clip_grad_norm_(self.dqn.online_net.parameters(), max_norm=self.gradient_clip)
