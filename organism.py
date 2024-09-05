@@ -49,7 +49,12 @@ class Organism:
     def __init__(self, matrika: Any, initial_position: Tuple[int, int]) -> None:
         self.id: UUID = uuid4()
         self.matrika = matrika
-        self.input_parameters: List[str] = []
+        self.input_parameters: List[str] = [
+            'attention_item_distance',
+            'attention_item_direction',
+            'organism_attention_distance',
+            'organism_attention_direction'
+        ]
         self.display_parameters: List[str] = [
             'energy',
             'nutrition',
@@ -90,7 +95,7 @@ class Organism:
 
         self.action_mapping: Dict[int, str] = {action.value: action.name for action in Action}
         
-        input_size: int = len(self.input_parameters) + self.nearest_item_params * self.max_nearest_items + 4
+        input_size: int = len(self.input_parameters) + self.max_nearest_items * self.nearest_item_params
         hidden_size: int = 16
         output_size: int = len(self.action_mapping)
         self.dqn: DQN = DQN(input_size, hidden_size, output_size)
@@ -122,57 +127,61 @@ class Organism:
                                         lr=parent.optimizer.param_groups[0]['lr'])
         self.training_stats = TrainingStatistics(self.dqn, self.optimizer)
 
-    def get_internal_state(self, external_state: StateSnapshot) -> Tuple[torch.Tensor]:
-        organism_x, organism_y = self.x, self.y
-        attention_x, attention_y = self.attention_x, self.attention_y
-        
-        state: List[float] = []
+    def get_internal_state(self, external_state: StateSnapshot) -> torch.Tensor:
+        nearest_items_vector = self.calculate_nearest_items_vector(external_state)
+        self.calculate_attention_item_parameters(external_state)
+        self.calculate_organism_attention_parameters()
 
-        for param in self.input_parameters:
-            state.append(getattr(self, param))
+        state = [getattr(self, param) for param in self.input_parameters]
+        state.extend(nearest_items_vector)
 
+        return torch.tensor(state, dtype=torch.float32)
+
+    def calculate_nearest_items_vector(self, external_state: StateSnapshot) -> List[float]:
+        nearest_items_vector = []
         nearest_item_ids = self.matrika.get_nearest_items(
-            organism_x, organism_y, 
+            self.x, self.y, 
             self.max_nearest_items, 
             self.detection_radius,
             external_state,
             item_type='food',
             return_IDs=True
         )
-        
+
         self.nearest_item_ID = nearest_item_ids[0] if nearest_item_ids else None
         self.update_item_memory(nearest_item_ids)
 
         if not nearest_item_ids:
-            nearest_item_ids = self.get_item_from_memory(organism_x, organism_y, external_state)
+            nearest_item_ids = self.get_item_from_memory(self.x, self.y, external_state)
 
         for item_id in nearest_item_ids:
             item_state = external_state.get_state(item_id)
             if item_state:
-                distance_org_item = self.matrika.calculate_distance(organism_x, organism_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
-                direction_org_item = self.matrika.calculate_angle(organism_x, organism_y, item_state['x'], item_state['y'], normalize=True)
-                
-                state.extend([distance_org_item, direction_org_item, item_state['reward']])
+                distance_org_item = self.matrika.calculate_distance(self.x, self.y, item_state['x'], item_state['y'], normalize_to_viewport=True)
+                direction_org_item = self.matrika.calculate_angle(self.x, self.y, item_state['x'], item_state['y'], normalize=True)
+                nearest_items_vector.extend([distance_org_item, direction_org_item, item_state['reward']])
 
-        padding_length = (self.max_nearest_items - len(nearest_item_ids)) * 3
-        state.extend([0.0] * padding_length)
+        padding_length = (self.max_nearest_items - len(nearest_item_ids)) * self.nearest_item_params
+        nearest_items_vector.extend([0.0] * padding_length)
 
-        if nearest_item_ids and nearest_item_ids[0]:
-            item_state = external_state.get_state(nearest_item_ids[0])
+        return nearest_items_vector
+
+    def calculate_attention_item_parameters(self, external_state: StateSnapshot) -> None:
+        if self.nearest_item_ID:
+            item_state = external_state.get_state(self.nearest_item_ID)
             if item_state:
-                distance_att_item = self.matrika.calculate_distance(attention_x, attention_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
-                direction_att_item = self.matrika.calculate_angle(attention_x, attention_y, item_state['x'], item_state['y'], normalize=True)
-                state.extend([distance_att_item, direction_att_item])
+                self.attention_item_distance = self.matrika.calculate_distance(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize_to_viewport=True)
+                self.attention_item_direction = self.matrika.calculate_angle(self.attention_x, self.attention_y, item_state['x'], item_state['y'], normalize=True)
             else:
-                state.extend([0.0, 0.0])
+                self.attention_item_distance = 0.0
+                self.attention_item_direction = 0.0
         else:
-            state.extend([0.0, 0.0])
+            self.attention_item_distance = 0.0
+            self.attention_item_direction = 0.0
 
-        distance_org_att = self.matrika.calculate_distance(organism_x, organism_y, attention_x, attention_y, normalize_to_viewport=True)
-        direction_org_att = self.matrika.calculate_angle(organism_x, organism_y, attention_x, attention_y, normalize=True)
-        state.extend([distance_org_att, direction_org_att])
-
-        return torch.tensor(state, dtype=torch.float32)
+    def calculate_organism_attention_parameters(self) -> None:
+        self.organism_attention_distance = self.matrika.calculate_distance(self.x, self.y, self.attention_x, self.attention_y, normalize_to_viewport=True)
+        self.organism_attention_direction = self.matrika.calculate_angle(self.x, self.y, self.attention_x, self.attention_y, normalize=True)
 
     def update_item_memory(self, nearest_item_ids: List[UUID]) -> None:
         """Update the item_memory list with new unique IDs."""
