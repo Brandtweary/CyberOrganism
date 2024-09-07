@@ -30,6 +30,8 @@ class SimulationEngine:
         self.NEON_GREEN = (57, 255, 20)
         self.RED = (255, 0, 0)
         self.BLUE = (0, 0, 255)
+        self.YELLOW = (255, 255, 0)
+        self.PURPLE = (128, 0, 128)
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE

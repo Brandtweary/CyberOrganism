@@ -36,23 +36,22 @@ def draw_items(screen, sim_state):
 
 def draw_attention_points(screen, sim_state):
     for org_id, org_state in sim_state.current_state.get_objects_in_snapshot(ObjectType.ORGANISM):
-        if 'attention_point' in org_state:
-            attention_x, attention_y = org_state['attention_point']
-            screen_x, screen_y = sim_state.sim_engine.grid_to_screen(attention_x, attention_y)
-            
-            # Calculate the size of the attention point
-            attention_size = int(sim_state.sim_engine.CELL_SIZE * 1.5)
-            
-            # Calculate the offset to center the attention point
-            offset = (attention_size - sim_state.sim_engine.CELL_SIZE) // 2
-            
-            # Adjust the position to center the attention point
-            centered_x = screen_x - offset
-            centered_y = screen_y - offset
-            
-            # Draw the attention point
-            pygame.draw.rect(screen, sim_state.sim_engine.RED, 
-                             (centered_x, centered_y, attention_size, attention_size))
+        attention_x, attention_y = org_state['attention_x'], org_state['attention_y']
+        screen_x, screen_y = sim_state.sim_engine.grid_to_screen(attention_x, attention_y)
+        
+        # Calculate the size of the attention point
+        attention_size = int(sim_state.sim_engine.CELL_SIZE * 1.0)
+        
+        # Calculate the offset to center the attention point
+        offset = (attention_size - sim_state.sim_engine.CELL_SIZE) // 2
+        
+        # Adjust the position to center the attention point
+        centered_x = screen_x - offset
+        centered_y = screen_y - offset
+        
+        # Draw the attention point
+        pygame.draw.rect(screen, sim_state.sim_engine.RED, 
+                            (centered_x, centered_y, attention_size, attention_size))
 
 
 def draw_organisms(screen, sim_state):

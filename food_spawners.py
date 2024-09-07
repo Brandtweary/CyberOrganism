@@ -55,10 +55,10 @@ class FoodSpawner(Item):
 
         if np.random.random() < 0.1:
             params = self.high_energy_food_params
-            color = (255, 0, 0)
+            color = self.sim_engine.PURPLE
         else:
             params = self.regular_food_params
-            color = (255, 255, 0)
+            color = self.sim_engine.YELLOW
 
         energy = max(0.1, np.random.normal(params['energy'], self.entropy * params['energy']))
         nutrition = max(0.01, np.random.normal(params['nutrition'], self.entropy * params['nutrition']))
