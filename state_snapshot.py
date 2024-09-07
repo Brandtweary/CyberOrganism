@@ -134,6 +134,10 @@ class StateSnapshot:
 
     def update_snapshot_with_objects(self, objects: List[Any]):
         '''
+        This method calculates the projected state changes for all objects, then synchronizes the state snapshot withinstance params, and then the state changes are processed.
+        Instance params and state dicts are synchronized as long as all modifications are isolated to the update_simulation loop in simulation_engine.
+        Changes must occur during update_state, state change dict processing, or apply_state in particular. 
+        If either the instance params or state dict are modified outside of this loop, then please at least ensure you apply the modification to both using update_state_params and apply_state_params.
         '''
         for obj in objects:
             if self.get_state(obj.id) is None:
