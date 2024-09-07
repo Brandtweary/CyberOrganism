@@ -76,9 +76,9 @@ def run_simulation(screen, clock, font, sim_state):
         if current_time - last_print_time >= 10:
             print_simulation_stats(sim_state, clock.get_fps())
             
-            avg_update_time = sum(update_times) / len(update_times)
-            avg_draw_time = sum(draw_times) / len(draw_times)
-            avg_total_frame_time = sum(total_frame_times) / len(total_frame_times)
+            avg_update_time = sum(update_times) / max(len(update_times), 1)
+            avg_draw_time = sum(draw_times) / max(len(draw_times), 1)
+            avg_total_frame_time = sum(total_frame_times) / max(len(total_frame_times), 1)
             
             # Store the average times in sim_state
             sim_state.avg_update_times.append(avg_update_time)

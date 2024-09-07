@@ -1,10 +1,9 @@
 from uuid import UUID, uuid4
-from typing import Dict, Any, Tuple, List, Type
+from typing import Dict, Any, Tuple, List, Type, Callable
 from state_snapshot import StateSnapshot
 from enums import ObjectType
 import inspect
-
-item_class_map = ()
+from functools import lru_cache
 
 class Item:
     def __init__(self, SimulationEngine, position: Tuple[int, int]):
@@ -40,12 +39,17 @@ class Item:
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot):
        pass
 
-def get_all_item_subclasses() -> Dict[str, Type[Item]]:
-    item_classes = {}
-    for name, obj in globals().items():
-        if inspect.isclass(obj) and issubclass(obj, Item) and obj != Item:
-            item_classes[name.lower()] = obj
-    return item_classes
+item_class_map: Dict[str, Callable[[], Type[Item]]] = {}
 
+def register_item_class(name: str):
+    def decorator(cls):
+        item_class_map[name.lower()] = lambda: cls
+        return cls
+    return decorator
+
+@lru_cache(maxsize=None)
 def get_item_class(item_type: str) -> Type[Item]:
-    return item_class_map.get(item_type.lower(), Item)
+    class_getter = item_class_map.get(item_type.lower())
+    if class_getter is None:
+        raise ValueError(f"No item class found for type '{item_type}'")
+    return class_getter()

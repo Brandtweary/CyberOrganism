@@ -15,7 +15,13 @@ class StateSnapshot:
         self.sim_engine = SimulationEngine
 
     def clone_state_snapshot(self) -> 'StateSnapshot':
-        return copy.deepcopy(self)
+        new_snapshot = self.__class__.__new__(self.__class__)
+        for attr, value in self.__dict__.items():
+            if attr == '_state':
+                setattr(new_snapshot, attr, copy.deepcopy(value))
+            else:
+                setattr(new_snapshot, attr, value)
+        return new_snapshot
 
     def get_state(self, uuid: UUID) -> Optional[Dict[str, Any]]:
         return self._state['object_states'].get(uuid)

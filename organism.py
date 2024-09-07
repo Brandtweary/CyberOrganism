@@ -298,39 +298,37 @@ class Organism:
         
         nearest_item_id = self.nearest_item_ID
         
-        if nearest_item_id and nearest_item_id in new_state['items']:
-            item_state = new_state['items'][str(nearest_item_id)]
-            item_x, item_y = item_state['x'], item_state['y']
-            
-            new_distance = self.sim_engine.calculate_distance(new_attention_x, new_attention_y, item_x, item_y)
-            
-            normalized_distance = self.sim_engine.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
-            proximity_reward = 0.5 * (1 - 2 * normalized_distance)
-            
-            attention_delta_x = new_attention_x - old_attention_x
-            attention_delta_y = new_attention_y - old_attention_y
+        if nearest_item_id:
+            item_state = new_state.get_state(nearest_item_id)
+            if item_state:
+                item_x, item_y = item_state['x'], item_state['y']
+                new_distance = self.sim_engine.calculate_distance(new_attention_x, new_attention_y, item_x, item_y)
+                normalized_distance = self.sim_engine.calculate_distance(new_attention_x, new_attention_y, item_x, item_y, normalize_to_viewport=True)
+                proximity_reward = 0.5 * (1 - 2 * normalized_distance)
+                attention_delta_x = new_attention_x - old_attention_x
+                attention_delta_y = new_attention_y - old_attention_y
 
-            if attention_delta_x == 0 and attention_delta_y == 0:
-                movement_angle = 0
-            else:
-                movement_angle = math.atan2(attention_delta_y, attention_delta_x)
+                if attention_delta_x == 0 and attention_delta_y == 0:
+                    movement_angle = 0
+                else:
+                    movement_angle = math.atan2(attention_delta_y, attention_delta_x)
 
-            target_delta_x = item_x - old_attention_x
-            target_delta_y = item_y - old_attention_y
-            target_angle = math.atan2(target_delta_y, target_delta_x)
-
-            angle_diff = math.atan2(math.sin(target_angle - movement_angle), math.cos(target_angle - movement_angle))
-
-            direction_reward = self.calculate_direction_reward(angle_diff)
-            
-            reward = proximity_reward + direction_reward
-            
-            if new_distance <= 2:
-                reward += 1.0
+                target_delta_x = item_x - old_attention_x
+                target_delta_y = item_y - old_attention_y
+                target_angle = math.atan2(target_delta_y, target_delta_x)
+                angle_diff = math.atan2(math.sin(target_angle - movement_angle), math.cos(target_angle - movement_angle))
+                direction_reward = self.calculate_direction_reward(angle_diff)
+                reward = proximity_reward + direction_reward
                 
-                attention_movement = self.sim_engine.calculate_distance(old_attention_x, old_attention_y, new_attention_x, new_attention_y)
-                if attention_movement < 0.1:
+                if new_distance <= 2:
                     reward += 1.0
+                    
+                    attention_movement = self.sim_engine.calculate_distance(old_attention_x, old_attention_y, new_attention_x, new_attention_y)
+                    if attention_movement < 0.1:
+                        reward += 1.0
+            else:
+                nearest_item_id = None
+                reward = -0.666
         else:
             reward = -0.666
         

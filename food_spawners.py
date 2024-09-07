@@ -1,9 +1,10 @@
 import numpy as np
 import time
-from items import Item
+from items import Item, register_item_class
 from food import Food
 import uuid
 
+@register_item_class('food_spawner')
 class FoodSpawner(Item):
     def __init__(self, SimulationEngine, position, spawn_frequency, regular_food_params, high_energy_food_params, spawn_range, entropy):
         super().__init__(SimulationEngine, position)

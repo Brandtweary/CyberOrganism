@@ -1,7 +1,7 @@
-from items import Item
+from items import Item, register_item_class
 from typing import Tuple
 
-
+@register_item_class('food')
 class Food(Item):
     def __init__(self, SimulationEngine, position: Tuple[int, int], energy=1.0, nutrition=0.1, color=(255, 255, 0), expiration_timer=60):
         super().__init__(SimulationEngine, position)

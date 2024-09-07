@@ -197,7 +197,7 @@ class SimulationEngine:
         return new_organism
 
     def get_nearest_items(self, x: int, y: int, num_items: int, detection_radius: float, state_snapshot: StateSnapshot, item_type: Optional[str] = None, return_IDs: bool = False) -> Union[List[UUID], List[Any]]:
-        item_class = get_item_class(item_type) if item_type else object
+        item_class = Item if item_type is None else get_item_class(item_type)
         
         sorted_items = sorted(
             [item for item in self.items 
