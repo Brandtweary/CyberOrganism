@@ -1,52 +1,25 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import random
 import math
 from collections import deque
-from training_statistics import TrainingStatistics
-import copy
-from typing import Dict, Any, Tuple, List, Optional, Union
-import numpy as np
+from typing import Dict, Any, Tuple, List, Optional
 from uuid import UUID, uuid4
 from state_snapshot import StateSnapshot, ObjectType
 from prioritized_experience_replay import PrioritizedExperienceReplay, Experience
 from enums import Action
+from RL_neural_network import ReinforcementLearningNeuralNetwork
+from dqn import DQN
 
-
-class DQNNetwork(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
-        super(DQNNetwork, self).__init__()
-        self.layers = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, output_size)
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.layers(x)
-
-class DQN(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
-        super(DQN, self).__init__()
-        self.online_net = DQNNetwork(input_size, hidden_size, output_size)
-        self.target_net = DQNNetwork(input_size, hidden_size, output_size)
-        self.target_net.load_state_dict(self.online_net.state_dict())
-        self.target_net.eval()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.online_net(x)
-
-    def update_target_net(self) -> None:
-        self.target_net.load_state_dict(self.online_net.state_dict())
 
 class Organism:
     def __init__(self, SimulationEngine: Any, initial_position: Tuple[int, int]) -> None:
+        # Static Parameters
         self.id: UUID = uuid4()
         self.sim_engine = SimulationEngine
+        self.type: ObjectType = ObjectType.ORGANISM
+        self.collision: bool = True
+        self.consumable: bool = False
+
+        # Neural Network Input Parameters
         self.input_parameters: List[str] = [
             'attention_item_distance',
             'attention_item_direction',
@@ -54,82 +27,92 @@ class Organism:
             'organism_attention_direction'
         ]
         self._set_input_parameters()  # all default to 0.0
+
+        # HUD Display Parameters
         self.display_parameters: List[str] = [
             'energy',
             'nutrition',
-            'loss_avg',
-            'reward_avg',
             'epsilon',
-            'q_value_average',
-            'expected_q_value_average'
+            'loss_window_avg',
+            'reward_window_avg',
+            'q_value_window_avg',
+            'expected_q_value_window_avg'
         ]
+        
+        # Simulation State Parameters
         self.x: float = initial_position[0]
         self.y: float = initial_position[1]
         self.attention_x: float = initial_position[0]
         self.attention_y: float = initial_position[1]
         self.marked_for_deletion: bool = False
-        self.type: ObjectType = ObjectType.ORGANISM
-        self.collision: bool = True
-        self.consumable: bool = False
         self.energy: float = 5.0
         self.nutrition: float = 0.0
-        self.loss_avg: float = 0.0
-        self.q_value_average: float = 0.0
-        self.expected_q_value_average: float = 0.0
-        self.epsilon: float = 1.0
-        self.epsilon_min: float = 0.01
-        self.epsilon_decay: float = 0.999
-        self.boltzmann_temperature: float = 0.2
+      
+        # Organismal Parameters
         self.movement_speed: float = 1.0
         self.attention_speed: float = 3.0 
         self.detection_radius: int = 100
-        self.consumption_range: int = 3
-        self.max_nearest_items: int = 1
-        self.nearest_item_params: int = 3
-        self.nearest_items: List[Any] = []
-        self.nearest_item_ID: Optional[UUID] = None
-        self.attention_move_distance: float = 1.0
         self.energy_consumption: float = 0.0
         self.nutrition_consumption: float = 0.0
+        self.max_nearest_items: int = 1
+        self.nearest_item_params: int = 3  # distance, direction, reward
 
+        # Neural Network Hyperparameters
         self.action_mapping: Dict[int, str] = {action.value: action.name for action in Action}
-        
-        input_size: int = len(self.input_parameters) + self.max_nearest_items * self.nearest_item_params
-        hidden_size: int = 16
-        output_size: int = len(self.action_mapping)
-        self.dqn: DQN = DQN(input_size, hidden_size, output_size)
-        self.optimizer: optim.Optimizer = optim.Adam(self.dqn.parameters(), lr=0.001)
+        self.input_size: int = len(self.input_parameters) + self.max_nearest_items * self.nearest_item_params
+        self.hidden_size: int = 16
+        self.output_size: int = len(self.action_mapping)
+        self.hidden_layers: int = 2
+        self.learning_rate: float = 0.001
         self.gamma: float = 0.9
         self.training_steps: int = 0
         self.target_update: int = 100
         self.batch_size: int = 4
         self.capacity: int = 100000
-        self.replay_buffer = PrioritizedExperienceReplay(capacity=self.capacity, batch_size=self.batch_size)
         self.gradient_clip: float = 1.0
+        self.epsilon: float = 1.0
+        self.epsilon_min: float = 0.01
+        self.epsilon_decay: float = 0.999
+        self.boltzmann_temperature: float = 0.2
 
-        self.training_stats: TrainingStatistics = TrainingStatistics(self.dqn, self.optimizer)
-        self.loss_history: deque = deque(maxlen=100)
-        self.q_value_history: deque = deque(maxlen=100)
-        self.expected_q_history: deque = deque(maxlen=100)
-        self.reward_history: deque = deque(maxlen=100)
-        self.reward_avg: float = 0.0
+        # Training Metrics
+        self.window_size = 100
+        self.loss_history = deque(maxlen=self.window_size)
+        self.q_value_history = deque(maxlen=self.window_size)
+        self.expected_q_history = deque(maxlen=self.window_size)
+        self.reward_history = deque(maxlen=self.window_size)
+        self.loss_window_avg = 0.0
+        self.q_value_window_avg = 0.0
+        self.expected_q_value_window_avg = 0.0
+        self.reward_window_avg = 0.0
 
-        self.current_experience: Optional[Dict[str, Any]] = None
+        # Current Experience (Working) Memory
+        self.current_experience: Optional[Experience] = None
         self.current_reward: float = 0.0
-        self.item_memory: List[UUID] = []
+        self.nearest_item_ID: Optional[UUID] = None
 
+        # Long-Term Memory
+        self.item_memory: List[UUID] = []
+        self.replay_buffer = PrioritizedExperienceReplay(capacity=self.capacity, batch_size=self.batch_size)
+
+        # State Snapshot Synchronization Parameters
         self.synchronized_params: List[str] = []
         self.param_count: int = 0
-    
+
+        # Neural Network Initialization
+        self.RL_neural_network: ReinforcementLearningNeuralNetwork = DQN(
+            organism=self,
+            action_mapping=self.action_mapping,
+            input_size=self.input_size,
+            hidden_size=self.hidden_size,
+            output_size=self.output_size,
+            hidden_layers=self.hidden_layers,
+            learning_rate=self.learning_rate
+        ) 
+
     def _set_input_parameters(self) -> None:
         for param in self.input_parameters:
             self.__setattr__(param, 0.0)
-
-    def clone(self: 'Organism', parent: 'Organism') -> None:
-        self.dqn = copy.deepcopy(parent.dqn)
-        self.optimizer = type(parent.optimizer)(self.dqn.online_net.parameters(), 
-                                        lr=parent.optimizer.param_groups[0]['lr'])
-        self.training_stats = TrainingStatistics(self.dqn, self.optimizer)
 
     def get_internal_state(self, external_state: StateSnapshot) -> torch.Tensor:
         nearest_items_vector = self.calculate_nearest_items_vector(external_state)
@@ -211,38 +194,20 @@ class Organism:
 
         return [nearest_item] if nearest_item else []
 
-    def select_attention_move(self, state: torch.Tensor) -> int:
-        if random.random() < self.epsilon:
-            action_index = random.randint(0, len(self.action_mapping) - 1)
-        else:
-            with torch.no_grad():
-                q_values = self.dqn.online_net(state).squeeze()
-            
-            action_index = self.boltzmann_exploration(q_values)
-        
-        return action_index
-
-    def boltzmann_exploration(self, q_values: torch.Tensor) -> int:
-        probabilities = F.softmax(q_values / self.boltzmann_temperature, dim=0)
-        probabilities = probabilities.cpu().numpy()
-        action_index = np.random.choice(len(self.action_mapping), p=probabilities)
-        return action_index
-
-    def update_attention_point(self, action_index: int) -> Tuple[float, float]:
-        action = Action(action_index)
+    def update_attention_point(self, action: Action) -> Tuple[float, float]:
         dx, dy = 0, 0
         if action == Action.UP:
-            dy = -self.attention_move_distance
+            dy = -self.attention_speed
         elif action == Action.DOWN:
-            dy = self.attention_move_distance
+            dy = self.attention_speed
         elif action == Action.LEFT:
-            dx = -self.attention_move_distance
+            dx = -self.attention_speed
         elif action == Action.RIGHT:
-            dx = self.attention_move_distance
+            dx = self.attention_speed
         elif action == Action.NO_MOVE:
             return 0, 0
 
-        return dx * self.attention_speed, dy * self.attention_speed
+        return dx, dy
 
     def move(self, attention_vector: Tuple[float, float]) -> Tuple[float, float]:
         current_attention_x = self.attention_x
@@ -268,8 +233,8 @@ class Organism:
 
     def update_state(self, external_state: StateSnapshot) -> Dict[str, Any]:
         internal_state = self.get_internal_state(external_state)
-        action_index = self.select_attention_move(internal_state)
-        attention_vector = self.update_attention_point(action_index)
+        action = self.RL_neural_network.select_action(internal_state)
+        attention_vector = self.update_attention_point(action)
         move_x, move_y = self.move(attention_vector)
         
         external_state_change = {
@@ -281,13 +246,12 @@ class Organism:
         
         external_state_change.update(metabolism_changes)
         
-        self.current_experience = {
-            'state': internal_state,
-            'action': action_index,
-            'reward': None,  # Will be set in apply_state
-            'next_state': None  # Will be set in apply_state
-        }
-        
+        self.current_experience = Experience(
+            state=internal_state,
+            action=action,
+            reward=None,  # Will be set in apply_state
+            next_state=None  # Will be set in apply_state
+        )
         return external_state_change
 
     def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
@@ -335,9 +299,6 @@ class Organism:
         reward += self.current_reward
         self.current_reward = 0.0
         
-        self.reward_history.append(reward)
-        self.reward_avg = sum(self.reward_history) / len(self.reward_history)
-        
         return reward
     
     def calculate_direction_reward(self, angle_diff: float) -> float:
@@ -349,18 +310,31 @@ class Organism:
         total_reward = self.calculate_rewards(old_state, new_state)
         new_internal_state = self.get_internal_state(new_state)
         
-        experience = Experience(
-            state=self.current_experience['state'],
-            action=self.current_experience['action'],
-            reward=total_reward,
-            next_state=new_internal_state
-        )
-        
-        self.replay_buffer.add(experience)
+        if self.current_experience:
+            updated_experience = Experience(
+                state=self.current_experience.state,
+                action=self.current_experience.action,
+                reward=total_reward,
+                next_state=new_internal_state
+            )
+            self.replay_buffer.add(updated_experience)
         
         self.current_experience = None
         
-        self.learn()
+        # Call learn method and update window averages
+        metrics = self.RL_neural_network.learn()
+        self.record_training_metrics(metrics, total_reward)
+
+    def record_training_metrics(self, metrics: Dict[str, float], total_reward: float) -> None:
+        self.loss_history.append(metrics["avg_loss"])
+        self.q_value_history.append(metrics["avg_q_value"])
+        self.expected_q_history.append(metrics["avg_expected_q_value"])
+        self.reward_history.append(total_reward)
+        
+        self.loss_window_avg = sum(self.loss_history) / len(self.loss_history)
+        self.q_value_window_avg = sum(self.q_value_history) / len(self.q_value_history)
+        self.expected_q_value_window_avg = sum(self.expected_q_history) / len(self.expected_q_history)
+        self.reward_window_avg = sum(self.reward_history) / len(self.reward_history)
 
     def update_metabolism(self) -> Dict[str, Any]:
         self.energy -= self.energy_consumption
@@ -379,61 +353,3 @@ class Organism:
             self.nutrition -= 30
             return True
         return False
-
-    def learn(self) -> None:
-        if not self.replay_buffer.can_sample():
-            return
-
-        batch, idxs = self.replay_buffer.sample()
-        
-        self.optimizer.zero_grad()
-        total_loss = 0
-        total_q_value = 0
-        total_expected_q_value = 0
-        
-        for i, experience in enumerate(batch):
-            state, action, reward, next_state = experience
-            
-            state = state.unsqueeze(0)
-            next_state = next_state.unsqueeze(0)
-            action = torch.tensor([action], dtype=torch.long)
-            reward = torch.tensor([reward], dtype=torch.float32)
-
-            current_q_value = self.dqn.online_net(state).gather(1, action.unsqueeze(1))
-
-            with torch.no_grad():
-                next_q_value = self.dqn.target_net(next_state).max(1)[0].detach()
-
-            expected_q_value = reward + (self.gamma * next_q_value)
-
-            loss = F.smooth_l1_loss(current_q_value, expected_q_value.unsqueeze(1))
-            
-            loss.backward()
-            
-            total_loss += loss.item()
-            total_q_value += current_q_value.item()
-            total_expected_q_value += expected_q_value.item()
-
-            td_error = abs(current_q_value.item() - expected_q_value.item())
-            self.replay_buffer.update_priorities([idxs[i]], [td_error])
-
-        torch.nn.utils.clip_grad_norm_(self.dqn.online_net.parameters(), max_norm=self.gradient_clip)
-        
-        self.optimizer.step()
-
-        self.loss_history.append(total_loss / len(batch))
-        self.q_value_history.append(total_q_value / len(batch))
-        self.expected_q_history.append(total_expected_q_value / len(batch))
-        
-        self.loss_avg = sum(self.loss_history) / len(self.loss_history)
-        self.q_value_average = sum(self.q_value_history) / len(self.q_value_history)
-        self.expected_q_value_average = sum(self.expected_q_history) / len(self.expected_q_history)
-
-        self.training_steps += 1
-        if self.training_steps % self.target_update == 0:
-            self.dqn.update_target_net()
-
-        self.decay_epsilon()
-
-    def decay_epsilon(self):
-        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)

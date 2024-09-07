@@ -183,9 +183,6 @@ class SimulationEngine:
         
         new_organism = self.create_organism(parent.__class__, (new_x, new_y), state_snapshot)
         
-        if new_organism:
-            new_organism.clone(parent)
-        
         return new_organism
 
     def get_nearest_items(self, x: int, y: int, num_items: int, detection_radius: float, state_snapshot: StateSnapshot, item_type: Optional[str] = None, return_IDs: bool = False) -> Union[List[UUID], List[Any]]:

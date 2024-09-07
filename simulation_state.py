@@ -26,8 +26,8 @@ class SimulationState:
         self.last_fps_calc_time = self.start_time
 
         # Add training statistics
-        self.training_stats = self.test_organism.training_stats.get_stats()
-        self.training_record_stats = self.test_organism.training_stats.record_stats
+        self.training_stats = self.test_organism.RL_neural_network.training_stats.get_stats()
+        self.training_record_stats = self.test_organism.RL_neural_network.training_stats.record_stats
 
         # Add new attributes for storing average times
         self.avg_update_times = []
@@ -67,8 +67,8 @@ class SimulationState:
         self.calculate_fps()
 
         # Update training statistics
-        self.training_stats = self.test_organism.training_stats.get_stats()
-        self.training_record_stats = self.test_organism.training_stats.record_stats
+        self.training_stats = self.test_organism.RL_neural_network.training_stats.get_stats()
+        self.training_record_stats = self.test_organism.RL_neural_network.training_stats.record_stats
 
         # Update last update time for interpolation
         self.last_update_time = time.time()

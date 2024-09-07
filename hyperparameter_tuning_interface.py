@@ -16,19 +16,21 @@ class HyperparameterTuningInterface:
         self.epsilon_decay = getattr(self.organism, 'epsilon_decay', None)
         self.epsilon_min = getattr(self.organism, 'epsilon_min', None)
         self.replay_buffer_size = getattr(getattr(self.organism, 'experience_buffer', None), 'maxlen', None)
-        self.batch_size = 16  # This is hardcoded in the train method
+        self.batch_size = getattr(self.organism, 'batch_size', None)
         self.target_update_frequency = getattr(self.organism, 'target_update', None)
         self.training_frequency = 1  # This is not explicitly defined, assumed to be every step
         self.initial_random_steps = 0  # This is not explicitly defined in the current implementation
 
         # Network architecture
-        policy_net = getattr(getattr(self.organism, 'dqn', None), 'policy_net', None)
-        self.hidden_size = getattr(getattr(policy_net, 'layers', [None])[0], 'out_features', None)
-        self.num_hidden_layers = len(getattr(policy_net, 'layers', [])) - 1 if policy_net else None
+        self.input_size = getattr(self.organism, 'input_size', None)
+        self.hidden_size = getattr(self.organism, 'hidden_size', None)
+        self.output_size = getattr(self.organism, 'output_size', None)
+        self.hidden_layers = getattr(self.organism, 'hidden_layers', None)
 
         # Optimizer parameters
-        self.optimizer_params = getattr(getattr(self.organism, 'optimizer', None), 'defaults', None)
-
+        self.optimizer_params = self.organism.RL_neural_network.optimizer.defaults
+        self.learning_rate = self.organism.learning_rate
+        
         # Environment parameters
         self.grid_size = getattr(self.sim_engine, 'GRID_SIZE', None)
         self.num_items = len(getattr(self.sim_engine, 'items', []))
@@ -59,10 +61,10 @@ class HyperparameterTuningInterface:
         self.gradient_clip_value = getattr(self.organism, 'gradient_clip_value', None)
 
         # Activation functions: Defines non-linearity in neural networks
-        self.activation_function = getattr(policy_net, 'activation_function', None) if policy_net else None
+        self.activation_function = getattr(self.organism.RL_neural_network.main_network, 'activation_function', None)
 
         # Initialization method: Affects initial weights of the neural network
-        self.weight_init_method = getattr(policy_net, 'weight_init_method', None) if policy_net else None
+        self.weight_init_method = getattr(self.organism.RL_neural_network.main_network, 'weight_init_method', None)
 
         # Learning rate decay schedule: Adjusts learning rate over time
         self.lr_decay_schedule = getattr(self.organism.optimizer, 'lr_scheduler', None)

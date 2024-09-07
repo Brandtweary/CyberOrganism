@@ -1,0 +1,47 @@
+from abc import ABC, abstractmethod
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from typing import Any, Dict, Tuple
+from enum import Action
+from training_statistics import TrainingStatistics
+
+
+class ReinforcementLearningNeuralNetwork(ABC):
+    def __init__(self, organism: Any, action_mapping: Dict[int, str], input_size: int, hidden_size: int, output_size: int, hidden_layers: int, learning_rate: float):
+        self.organism = organism
+        self.action_mapping = action_mapping
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.hidden_layers = hidden_layers
+        self.learning_rate = learning_rate
+        
+        self.main_network = self.create_network()
+        self.optimizer = self.create_optimizer()
+        self.training_stats = TrainingStatistics(self.main_network, self.optimizer)
+
+    @abstractmethod
+    def create_network(self) -> nn.Module:
+        pass
+
+    @abstractmethod
+    def create_optimizer(self) -> optim.Optimizer:
+        pass
+
+    @abstractmethod
+    def select_action(self, state: torch.Tensor) -> Action:
+        pass
+
+    @abstractmethod
+    def learn(self) -> Dict[str, float]:
+        pass
+
+    def get_network_parameters(self) -> Dict[str, torch.Tensor]:
+        return {name: param.data for name, param in self.main_network.named_parameters()}
+
+    def load_network_parameters(self, parameters: Dict[str, torch.Tensor]) -> None:
+        for name, param in self.main_network.named_parameters():
+            if name in parameters:
+                param.data.copy_(parameters[name])
+    
