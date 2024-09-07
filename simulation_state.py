@@ -85,8 +85,7 @@ class SimulationState:
     def generate_simulation_statistics(self):
         stats = []
         
-        # Input and display parameters
-        for param_dict in [self.input_parameters, self.display_parameters]:
+        for param_dict in self.display_parameters:
             for param, value in param_dict.items():
                 formatted_name = self.format_parameter_name(param)
                 formatted_value = f"{value:.3f}" if isinstance(value, float) else value
