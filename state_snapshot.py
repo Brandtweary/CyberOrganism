@@ -133,21 +133,19 @@ class StateSnapshot:
         return self._state['object_states']
 
     def update_snapshot_with_objects(self, objects: List[Any]):
-        # Verify all objects are in the snapshot
+        '''
+        '''
         for obj in objects:
             if self.get_state(obj.id) is None:
                 raise KeyError(f"No state found for object: {obj.id}")
 
-        # Collect state changes
-        state_changes = {}
+        state_changes = {}  # for this to work correctly, do not modify state dicts or instance params outside of the update simulation loop
         for obj in objects:
             state_changes[obj.id] = obj.update_state(self)
 
-        # Update object states
         for obj in objects:
             self.update_state_params(obj, obj.id)
 
-        # Process state changes
         for obj_id, change_dict in state_changes.items():
             obj = next(o for o in objects if o.id == obj_id)
             self.process_state_change_dict(obj_id, change_dict, obj, self.get_state(obj_id))
