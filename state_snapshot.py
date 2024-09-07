@@ -132,68 +132,37 @@ class StateSnapshot:
     def object_states(self):
         return self._state['object_states']
 
-    def update_snapshot_with_items(self, items: List[Any]):
-        # Verify all items are in the snapshot
-        for item in items:
-            if self.get_state(item.id) is None:
-                raise KeyError(f"No state found for item: {item.id}")
+    def update_snapshot_with_objects(self, objects: List[Any]):
+        # Verify all objects are in the snapshot
+        for obj in objects:
+            if self.get_state(obj.id) is None:
+                raise KeyError(f"No state found for object: {obj.id}")
 
         # Collect state changes
         state_changes = {}
-        for item in items:
-            state_changes[item.id] = item.update_state(self)
+        for obj in objects:
+            state_changes[obj.id] = obj.update_state(self)
 
-        # Update item states
-        for item in items:
-            self.update_state_params(item, item.id)
-
-        # Process state changes
-        for item_id, change_dict in state_changes.items():
-            item = next(i for i in items if i.id == item_id)
-            self.process_item_state_change_dict(item_id, change_dict, item)
-
-    def update_snapshot_with_organisms(self, organisms: List[Any]):
-        # Verify all organisms are in the snapshot
-        for organism in organisms:
-            if self.get_state(organism.id) is None:
-                raise KeyError(f"No state found for organism: {organism.id}")
-
-        # Collect state changes
-        state_changes = {}
-        for organism in organisms:
-            state_changes[organism.id] = organism.update_state(self)
-
-        # Update organism states
-        for organism in organisms:
-            self.update_state_params(organism, organism.id)
+        # Update object states
+        for obj in objects:
+            self.update_state_params(obj, obj.id)
 
         # Process state changes
-        for org_id, change_dict in state_changes.items():
-            organism = next(org for org in organisms if org.id == org_id)
-            self.process_organism_state_change_dict(org_id, change_dict, organism)
+        for obj_id, change_dict in state_changes.items():
+            obj = next(o for o in objects if o.id == obj_id)
+            self.process_state_change_dict(obj_id, change_dict, obj, self.get_state(obj_id))
 
-
-    def process_item_state_change_dict(self, item_id, change_dict, item):
-        item_state = self.get_state(item_id)
+    def process_state_change_dict(self, obj_id: UUID, change_dict: Dict[str, Any], obj: Any, obj_state: Dict[str, Any]):
         for key, value in change_dict.items():
             method_name = f"process_{key}"
             if hasattr(self, method_name):
-                getattr(self, method_name)(item_id, value, item, item_state)
+                getattr(self, method_name)(obj_id, value, obj, obj_state)
             else:
-                print(f"Warning: No method to process {key}")
-
+                print(f"Warning: No method to process {key} for object {obj_id}")
+    
     def process_spawn_food(self, item_id, spawn_food: bool, item, item_state):
         if spawn_food:
             item.spawn_food(self)
-
-    def process_organism_state_change_dict(self, org_id, change_dict, organism):
-        org_state = self.get_state(org_id)
-        for key, value in change_dict.items():
-            method_name = f"process_{key}"
-            if hasattr(self, method_name):
-                getattr(self, method_name)(org_id, value, organism, org_state)
-            else:
-                print(f"Warning: No method to process {key}")
 
     def process_movement_vector(self, org_id: UUID, movement_vector, organism, org_state):
         dx, dy = movement_vector

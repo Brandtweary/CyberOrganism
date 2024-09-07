@@ -152,18 +152,9 @@ class SimulationEngine:
     def update_simulation(self) -> None:
         new_state: StateSnapshot = self.current_state.clone_state_snapshot()
         new_state.update_time(time.time())
-
-        # Update all components using the new mutable state
-        self.update_all_organisms(new_state)
-        self.update_all_items(new_state)
-
-        # Apply the new state
+        self.update_all_objects(new_state)
         self.apply_simulation_state(self.current_state, new_state)
-
-        # Update the state history
         self.state_history.append(self.current_state)
-        
-        # Set the new state as the current state
         self.current_state = new_state
 
     def apply_simulation_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
@@ -175,12 +166,11 @@ class SimulationEngine:
                 if obj:
                     new_state.apply_state_params(obj, obj_id)
                     obj.apply_state(old_state, new_state)
+                    new_state.update_state_params(obj, obj_id) # in case any instance params change during apply_state
 
-    def update_all_organisms(self, new_state: StateSnapshot) -> None:
-        new_state.update_snapshot_with_organisms(self.organisms)
-
-    def update_all_items(self, new_state: StateSnapshot) -> None:
-        new_state.update_snapshot_with_items(self.items)
+    def update_all_objects(self, new_state: StateSnapshot) -> None:
+        all_objects = self.organisms + self.items
+        new_state.update_snapshot_with_objects(all_objects)
 
     def spawn_organism(self, parent: Any, state_snapshot: StateSnapshot) -> Optional[Any]:
         parent_state = state_snapshot.get_state(parent.id)
