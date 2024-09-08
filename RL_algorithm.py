@@ -3,11 +3,24 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from typing import Any, Dict, Tuple
-from enum import Action
+from enums import Action
 from training_statistics import TrainingStatistics
 
 
-class ReinforcementLearningNeuralNetwork(ABC):
+class ReinforcementLearningAlgorithm(ABC):
+    """
+    Abstract base class for deep reinforcement learning algorithms.
+
+    This class serves as a template for implementing various deep RL algorithms
+    such as DQN, DDPG, A2C, etc. It provides a common structure and interface
+    for RL algorithms that use neural networks as function approximators.
+
+    Subclasses should implement the abstract methods to define specific RL algorithms.
+    Additionally, subclasses are responsible for initializing and managing any
+    additional networks required for their particular implementation (e.g., target
+    networks, critic networks) beyond the main network provided by this base class.
+    """
+
     def __init__(self, organism: Any, action_mapping: Dict[int, str], input_size: int, hidden_size: int, output_size: int, hidden_layers: int, learning_rate: float):
         self.organism = organism
         self.action_mapping = action_mapping
@@ -44,4 +57,3 @@ class ReinforcementLearningNeuralNetwork(ABC):
         for name, param in self.main_network.named_parameters():
             if name in parameters:
                 param.data.copy_(parameters[name])
-    

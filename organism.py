@@ -6,12 +6,20 @@ from uuid import UUID, uuid4
 from state_snapshot import StateSnapshot, ObjectType
 from prioritized_experience_replay import PrioritizedExperienceReplay, Experience
 from enums import Action
-from RL_neural_network import ReinforcementLearningNeuralNetwork
+from RL_algorithm import ReinforcementLearningAlgorithm
 from dqn import DQN
 
 
 class Organism:
+    """
+    Represents a simulated agent that uses deep reinforcement learning to select actions and learn.
+    
+    This class manages state representations, tracks hyperparameters, synchronizes with the simulation engine,
+    and handles its own metabolism. The specific learning details are abstracted into the RL Algorithm class.
+    """
+
     def __init__(self, SimulationEngine: Any, initial_position: Tuple[int, int]) -> None:
+        """Initialize the organism with given simulation engine and starting position."""
         # Static Parameters
         self.id: UUID = uuid4()
         self.sim_engine = SimulationEngine
@@ -58,7 +66,7 @@ class Organism:
         self.nearest_item_params: int = 3  # distance, direction, reward
 
         # Neural Network Hyperparameters
-        self.action_mapping: Dict[int, str] = {action.value: action.name for action in Action}
+        self.action_mapping: Dict[int, Action] = {action.value: action for action in Action}
         self.input_size: int = len(self.input_parameters) + self.max_nearest_items * self.nearest_item_params
         self.hidden_size: int = 16
         self.output_size: int = len(self.action_mapping)
@@ -99,8 +107,8 @@ class Organism:
         self.synchronized_params: List[str] = []
         self.param_count: int = 0
 
-        # Neural Network Initialization
-        self.RL_neural_network: ReinforcementLearningNeuralNetwork = DQN(
+        # RL Neural Network Initialization
+        self.RL_algorithm: ReinforcementLearningAlgorithm = DQN(
             organism=self,
             action_mapping=self.action_mapping,
             input_size=self.input_size,
@@ -111,10 +119,12 @@ class Organism:
         ) 
 
     def _set_input_parameters(self) -> None:
+        """Initialize all input parameters to 0.0."""
         for param in self.input_parameters:
             self.__setattr__(param, 0.0)
 
     def get_internal_state(self, external_state: StateSnapshot) -> torch.Tensor:
+        """Compute and return the internal state of the organism."""
         nearest_items_vector = self.calculate_nearest_items_vector(external_state)
         self.calculate_attention_item_parameters(external_state)
         self.calculate_organism_attention_parameters()
@@ -125,6 +135,7 @@ class Organism:
         return torch.tensor(state, dtype=torch.float32)
 
     def calculate_nearest_items_vector(self, external_state: StateSnapshot) -> List[float]:
+        """Calculate and return a vector representing the nearest items."""
         nearest_items_vector = []
         nearest_item_ids = self.sim_engine.get_nearest_items(
             self.x, self.y, 
@@ -140,6 +151,8 @@ class Organism:
 
         if not nearest_item_ids:
             nearest_item_ids = self.get_item_from_memory(self.x, self.y, external_state)
+            if nearest_item_ids:
+                self.nearest_item_ID = nearest_item_ids[0]
 
         for item_id in nearest_item_ids:
             item_state = external_state.get_state(item_id)
@@ -154,6 +167,7 @@ class Organism:
         return nearest_items_vector
 
     def calculate_attention_item_parameters(self, external_state: StateSnapshot) -> None:
+        """Calculate the distance and direction to the nearest item from the attention point."""
         if self.nearest_item_ID:
             item_state = external_state.get_state(self.nearest_item_ID)
             if item_state:
@@ -167,6 +181,7 @@ class Organism:
             self.attention_item_direction = 0.0
 
     def calculate_organism_attention_parameters(self) -> None:
+        """Calculate the distance and direction from the organism to its attention point."""
         self.organism_attention_distance = self.sim_engine.calculate_distance(self.x, self.y, self.attention_x, self.attention_y, normalize_to_viewport=True)
         self.organism_attention_direction = self.sim_engine.calculate_angle(self.x, self.y, self.attention_x, self.attention_y, normalize=True)
 
@@ -195,6 +210,7 @@ class Organism:
         return [nearest_item] if nearest_item else []
 
     def update_attention_point(self, action: Action) -> Tuple[float, float]:
+        """Update the attention point based on the given action."""
         dx, dy = 0, 0
         if action == Action.UP:
             dy = -self.attention_speed
@@ -210,6 +226,7 @@ class Organism:
         return dx, dy
 
     def move(self, attention_vector: Tuple[float, float]) -> Tuple[float, float]:
+        """Calculate the movement vector based on the attention vector."""
         current_attention_x = self.attention_x
         current_attention_y = self.attention_y
         
@@ -232,13 +249,14 @@ class Organism:
             return 0, 0
 
     def update_state(self, external_state: StateSnapshot) -> Dict[str, Any]:
+        """Update the organism's state and return the changes to be applied externally."""
         internal_state = self.get_internal_state(external_state)
-        action = self.RL_neural_network.select_action(internal_state)
+        action = self.RL_algorithm.select_action(internal_state)
         attention_vector = self.update_attention_point(action)
-        move_x, move_y = self.move(attention_vector)
+        movement_vector = self.move(attention_vector)
         
         external_state_change = {
-            'movement_vector': (move_x, move_y),
+            'movement_vector': movement_vector,
             'attention_vector': attention_vector,
         }
         
@@ -255,6 +273,7 @@ class Organism:
         return external_state_change
 
     def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
+        """Calculate the reward based on the old and new states."""
         old_organism_state = old_state.get_state(self.id)
         
         old_attention_x, old_attention_y = old_organism_state['attention_x'], old_organism_state['attention_y']
@@ -302,11 +321,13 @@ class Organism:
         return reward
     
     def calculate_direction_reward(self, angle_diff: float) -> float:
+        """Calculate the direction reward based on the angle difference."""
         normalized_angle = (angle_diff + math.pi) % (2 * math.pi) - math.pi
         reward = 0.5 * math.cos(normalized_angle)
         return reward
 
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
+        """Apply the new state, calculate rewards, and trigger learning."""
         total_reward = self.calculate_rewards(old_state, new_state)
         new_internal_state = self.get_internal_state(new_state)
         
@@ -320,12 +341,11 @@ class Organism:
             self.replay_buffer.add(updated_experience)
         
         self.current_experience = None
-        
-        # Call learn method and update window averages
-        metrics = self.RL_neural_network.learn()
+        metrics = self.RL_algorithm.learn()
         self.record_training_metrics(metrics, total_reward)
 
     def record_training_metrics(self, metrics: Dict[str, float], total_reward: float) -> None:
+        """Record and update training metrics including loss, Q-values, and rewards."""
         self.loss_history.append(metrics["avg_loss"])
         self.q_value_history.append(metrics["avg_q_value"])
         self.expected_q_history.append(metrics["avg_expected_q_value"])
@@ -337,6 +357,7 @@ class Organism:
         self.reward_window_avg = sum(self.reward_history) / len(self.reward_history)
 
     def update_metabolism(self) -> Dict[str, Any]:
+        """Update the organism's energy and nutrition levels, and check for reproduction."""
         self.energy -= self.energy_consumption
         self.nutrition = max(0, self.nutrition - self.nutrition_consumption)
         
@@ -348,6 +369,7 @@ class Organism:
         }
 
     def handle_reproduction(self) -> bool:
+        """Check if the organism can reproduce and update its energy and nutrition accordingly."""
         if self.energy > 100 and self.nutrition > 100:
             self.energy -= 50
             self.nutrition -= 30

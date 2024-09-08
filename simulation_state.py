@@ -26,8 +26,8 @@ class SimulationState:
         self.last_fps_calc_time = self.start_time
 
         # Add training statistics
-        self.training_stats = self.test_organism.RL_neural_network.training_stats.get_stats()
-        self.training_record_stats = self.test_organism.RL_neural_network.training_stats.record_stats
+        self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
+        self.training_record_stats = self.test_organism.RL_algorithm.training_stats.record_stats
 
         # Add new attributes for storing average times
         self.avg_update_times = []
@@ -46,7 +46,7 @@ class SimulationState:
         self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
         
         # Update summary statistics
-        current_loss = self.display_parameters['loss_avg']
+        current_loss = self.display_parameters['loss_window_avg']
         if current_loss < 0.5:
             self.time_low_loss += self.sim_engine.UPDATE_INTERVAL
         self.total_time = time.time() - self.start_time
@@ -67,8 +67,8 @@ class SimulationState:
         self.calculate_fps()
 
         # Update training statistics
-        self.training_stats = self.test_organism.RL_neural_network.training_stats.get_stats()
-        self.training_record_stats = self.test_organism.RL_neural_network.training_stats.record_stats
+        self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
+        self.training_record_stats = self.test_organism.RL_algorithm.training_stats.record_stats
 
         # Update last update time for interpolation
         self.last_update_time = time.time()
@@ -85,11 +85,10 @@ class SimulationState:
     def generate_simulation_statistics(self):
         stats = []
         
-        for param_dict in self.display_parameters:
-            for param, value in param_dict.items():
-                formatted_name = self.format_parameter_name(param)
-                formatted_value = f"{value:.3f}" if isinstance(value, float) else value
-                stats.append(f"{formatted_name}: {formatted_value}")
+        for param, value in self.display_parameters.items():
+            formatted_name = self.format_parameter_name(param)
+            formatted_value = f"{value:.3f}" if isinstance(value, float) else value
+            stats.append(f"{formatted_name}: {formatted_value}")
         
         # Performance data
         stats.extend([

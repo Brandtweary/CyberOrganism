@@ -5,8 +5,8 @@ import torch.nn.functional as F
 import random
 import numpy as np
 from typing import Any, Dict, List
-from enum import Action
-from RL_neural_network import ReinforcementLearningNeuralNetwork
+from enums import Action
+from RL_algorithm import ReinforcementLearningAlgorithm
 
 
 class DQNNetwork(nn.Module):
@@ -21,7 +21,7 @@ class DQNNetwork(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layers(x)
 
-class DQN(ReinforcementLearningNeuralNetwork):
+class DQN(ReinforcementLearningAlgorithm):
     def __init__(self, organism: Any, action_mapping: Dict[int, str], input_size: int, hidden_size: int, output_size: int, hidden_layers: int, learning_rate: float):
         super().__init__(organism, action_mapping, input_size, hidden_size, output_size, hidden_layers, learning_rate)
         self.target_network = self.create_network()
@@ -42,7 +42,7 @@ class DQN(ReinforcementLearningNeuralNetwork):
                 q_values = self.main_network(state).squeeze()
             action_index = self.boltzmann_exploration(q_values)
         
-        return Action(self.action_mapping[action_index])
+        return self.action_mapping[action_index]
 
     def boltzmann_exploration(self, q_values: torch.Tensor) -> int:
         probabilities = F.softmax(q_values / self.organism.boltzmann_temperature, dim=0)
@@ -66,13 +66,8 @@ class DQN(ReinforcementLearningNeuralNetwork):
             
             state = state.unsqueeze(0)
             next_state = next_state.unsqueeze(0)
-            
-            # Convert Action enum to integer index using the inverse of action_mapping
-            action_index = next(index for index, action_name in self.action_mapping.items() if action_name == action.name)
-            action_index = torch.tensor([action_index], dtype=torch.long)
-            
+            action_index = torch.tensor([action.value], dtype=torch.long) 
             reward = torch.tensor([reward], dtype=torch.float32)
-
             current_q_value = self.main_network(state).gather(1, action_index.unsqueeze(1))
 
             with torch.no_grad():
@@ -115,4 +110,4 @@ class DQN(ReinforcementLearningNeuralNetwork):
         self.target_network.load_state_dict(self.main_network.state_dict())
     
     def decay_epsilon(self):
-        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+        self.organism.epsilon = max(self.organism.epsilon_min, self.organism.epsilon * self.organism.epsilon_decay)

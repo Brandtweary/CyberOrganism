@@ -28,7 +28,7 @@ class HyperparameterTuningInterface:
         self.hidden_layers = getattr(self.organism, 'hidden_layers', None)
 
         # Optimizer parameters
-        self.optimizer_params = self.organism.RL_neural_network.optimizer.defaults
+        self.optimizer_params = self.organism.RL_algorithm.optimizer.defaults
         self.learning_rate = self.organism.learning_rate
         
         # Environment parameters
@@ -61,10 +61,10 @@ class HyperparameterTuningInterface:
         self.gradient_clip_value = getattr(self.organism, 'gradient_clip_value', None)
 
         # Activation functions: Defines non-linearity in neural networks
-        self.activation_function = getattr(self.organism.RL_neural_network.main_network, 'activation_function', None)
+        self.activation_function = getattr(self.organism.RL_algorithm.main_network, 'activation_function', None)
 
         # Initialization method: Affects initial weights of the neural network
-        self.weight_init_method = getattr(self.organism.RL_neural_network.main_network, 'weight_init_method', None)
+        self.weight_init_method = getattr(self.organism.RL_algorithm.main_network, 'weight_init_method', None)
 
         # Learning rate decay schedule: Adjusts learning rate over time
         self.lr_decay_schedule = getattr(self.organism.optimizer, 'lr_scheduler', None)
