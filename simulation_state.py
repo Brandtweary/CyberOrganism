@@ -3,10 +3,12 @@ import time
 
 
 class SimulationState:
-    def __init__(self, SimulationEngine):
-        self.sim_engine = SimulationEngine
-        self.current_state = SimulationEngine.current_state
-        self.test_organism = SimulationEngine.test_organism
+    def __init__(self, simulation_engine, clock, ui):
+        self.sim_engine = simulation_engine
+        self.clock = clock
+        self.ui = ui
+        self.current_state = simulation_engine.current_state
+        self.test_organism = simulation_engine.test_organism
         self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
         self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
         self.cpu_usage = psutil.cpu_percent()
@@ -36,6 +38,39 @@ class SimulationState:
 
         # Add last update time for interpolation
         self.last_update_time = time.time()
+
+    def generate_organism_stats(self):
+        stats = []
+        for param, value in self.display_parameters.items():
+            formatted_name = self.format_parameter_name(param)
+            formatted_value = f"{value:.3f}" if isinstance(value, float) else value
+            stats.append(f"{formatted_name}: {formatted_value}")
+        return stats
+
+    def generate_performance_stats(self):
+        stats = [
+            f"CPU Usage: {self.cpu_usage:.1f}%",
+            f"Memory Usage: {self.memory_usage:.1f}%",
+            f"Available Memory: {self.available_memory:.1f} MB",
+            f"Update FPS: {self.update_fps:.1f}",
+            f"Display FPS: {self.clock.get_fps():.1f}",
+            f"Simulation Time: {int(self.total_time)} seconds",
+        ]
+        return stats
+    
+    def generate_training_stats(self):
+        stats = []
+        for stat_type, stat_info in self.training_record_stats.items():
+            if stat_info['record']:
+                stats.append(f"{stat_type}:")
+                for stat_name in stat_info['stat_names']:
+                    if stat_name in self.training_stats:
+                        values = self.training_stats[stat_name]
+                        if values:
+                            value = values[-1]
+                            formatted_value = f"{value:.3f}" if isinstance(value, float) else value
+                            stats.append(f"  {stat_name}: {formatted_value}")
+        return stats
 
     def update(self):
         cycle_start_time = time.time()
@@ -70,6 +105,11 @@ class SimulationState:
         self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
         self.training_record_stats = self.test_organism.RL_algorithm.training_stats.record_stats
 
+        # Update UI stats
+        organism_stats = self.generate_organism_stats()
+        performance_stats = self.generate_performance_stats()
+        self.ui.update_stats(organism_stats, performance_stats)
+
         # Update last update time for interpolation
         self.last_update_time = time.time()
 
@@ -81,39 +121,6 @@ class SimulationState:
             self.update_fps = self.frame_count / elapsed_time
             self.frame_count = 0
             self.last_fps_calc_time = current_time
-
-    def generate_simulation_statistics(self):
-        stats = []
-        
-        for param, value in self.display_parameters.items():
-            formatted_name = self.format_parameter_name(param)
-            formatted_value = f"{value:.3f}" if isinstance(value, float) else value
-            stats.append(f"{formatted_name}: {formatted_value}")
-        
-        # Performance data
-        stats.extend([
-            f"CPU Usage: {self.cpu_usage:.1f}%",
-            f"Memory Usage: {self.memory_usage:.1f}%",
-            f"Available Memory: {self.available_memory:.1f} MB",
-            f"Update FPS: {self.update_fps:.1f}",
-            f"Simulation Time: {int(self.total_time)} seconds",
-        ])
-        
-        return stats
-
-    def generate_training_statistics(self):
-        stats = []
-        for stat_type, stat_info in self.training_record_stats.items():
-            if stat_info['record']:
-                stats.append(f"{stat_type}:")
-                for stat_name in stat_info['stat_names']:
-                    if stat_name in self.training_stats:
-                        values = self.training_stats[stat_name]
-                        if values:
-                            value = values[-1]
-                            formatted_value = f"{value:.3f}" if isinstance(value, float) else value
-                            stats.append(f"  {stat_name}: {formatted_value}")
-        return stats
 
     @staticmethod
     def format_parameter_name(name):

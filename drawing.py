@@ -7,7 +7,8 @@ def draw_simulation(screen, sim_state, font, clock):
     draw_items(screen, sim_state)
     draw_attention_points(screen, sim_state)
     draw_organisms(screen, sim_state)
-    display_simulation_stats(screen, font, clock, sim_state)
+    pygame.display.flip()
+    # display_simulation_stats(screen, font, clock, sim_state)
 
 def draw_items(screen, sim_state):
     # Collect all nearest item IDs from organisms
@@ -61,14 +62,14 @@ def draw_organisms(screen, sim_state):
             rect = pygame.Rect(screen_x, screen_y, sim_state.sim_engine.CELL_SIZE, sim_state.sim_engine.CELL_SIZE)
             pygame.draw.rect(screen, sim_state.sim_engine.NEON_GREEN, rect)
 
-def display_simulation_stats(screen, font, clock, sim_state):
-    simulation_stats = sim_state.generate_simulation_statistics()
-    simulation_stats.append(f"Display FPS: {clock.get_fps():.1f}")
-    
-    text_y = 10
-    for text in simulation_stats:
-        text_surface = font.render(text, True, sim_state.sim_engine.NEON_GREEN, sim_state.sim_engine.BLACK)
-        text_rect = text_surface.get_rect()
-        text_rect.topright = (sim_state.sim_engine.SCREEN_WIDTH - 10, text_y)
-        screen.blit(text_surface, text_rect)
-        text_y += 30
+# def display_simulation_stats(screen, font, clock, sim_state):
+#     simulation_stats = sim_state.generate_simulation_statistics()
+#     simulation_stats.append(f"Display FPS: {clock.get_fps():.1f}")
+#     
+#     text_y = 10
+#     for text in simulation_stats:
+#         text_surface = font.render(text, True, sim_state.sim_engine.NEON_GREEN, sim_state.sim_engine.BLACK)
+#         text_rect = text_surface.get_rect()
+#         text_rect.topright = (sim_state.sim_engine.SCREEN_WIDTH - 10, text_y)
+#         screen.blit(text_surface, text_rect)
+#         text_y += 30
