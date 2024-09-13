@@ -9,7 +9,7 @@ from simulation_state import SimulationState
 
 def main():
     ui = UI()
-    root, screen, clock, font = ui.create_window()
+    display, clock = ui.create_window()
     
     simulation_engine = SimulationEngine()
     
@@ -19,20 +19,18 @@ def main():
 
     sim_state = SimulationState(simulation_engine, clock, ui)
     
-    run_simulation(ui, screen, clock, font, sim_state)
+    run_simulation(ui, display, clock, sim_state)
     
-    root.destroy()
     pygame.quit()
 
-def run_simulation(ui, screen, clock, font, sim_state):
+def run_simulation(ui, display, clock, sim_state):
     running = True
     last_print_time = time.time()
     update_times, draw_times, total_frame_times = [], [], []
     frame_count = 0
     
     while running:
-
-        running = ui.run()
+        running = ui.handle_events()
         if not running:
             break
         
@@ -45,8 +43,8 @@ def run_simulation(ui, screen, clock, font, sim_state):
             update_times.append(time.time() - update_start_time)
 
         draw_start_time = time.time()
-        draw_simulation(screen, sim_state, font, clock)
-        ui.blit_pygame_surface()
+        draw_simulation(display, sim_state)
+        pygame.display.flip()
         draw_times.append(time.time() - draw_start_time)
 
         if frame_count % 2 == 0:

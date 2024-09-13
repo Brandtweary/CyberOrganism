@@ -1,14 +1,20 @@
 import pygame
 from state_snapshot import ObjectType
+import time
 
 
-def draw_simulation(screen, sim_state, font, clock):
+class CachedElement:
+    def __init__(self, surface):
+        self.surface = surface
+
+cached_surfaces = {}
+
+def draw_simulation(screen, sim_state):
     screen.fill(sim_state.sim_engine.BLACK)
     draw_items(screen, sim_state)
     draw_attention_points(screen, sim_state)
     draw_organisms(screen, sim_state)
-    pygame.display.flip()
-    # display_simulation_stats(screen, font, clock, sim_state)
+    draw_gui(screen, sim_state.ui, sim_state)
 
 def draw_items(screen, sim_state):
     # Collect all nearest item IDs from organisms
@@ -62,14 +68,76 @@ def draw_organisms(screen, sim_state):
             rect = pygame.Rect(screen_x, screen_y, sim_state.sim_engine.CELL_SIZE, sim_state.sim_engine.CELL_SIZE)
             pygame.draw.rect(screen, sim_state.sim_engine.NEON_GREEN, rect)
 
-# def display_simulation_stats(screen, font, clock, sim_state):
-#     simulation_stats = sim_state.generate_simulation_statistics()
-#     simulation_stats.append(f"Display FPS: {clock.get_fps():.1f}")
-#     
-#     text_y = 10
-#     for text in simulation_stats:
-#         text_surface = font.render(text, True, sim_state.sim_engine.NEON_GREEN, sim_state.sim_engine.BLACK)
-#         text_rect = text_surface.get_rect()
-#         text_rect.topright = (sim_state.sim_engine.SCREEN_WIDTH - 10, text_y)
-#         screen.blit(text_surface, text_rect)
-#         text_y += 30
+def draw_gui(screen, ui, sim_state):
+    ui_elements = ui.get_ui_elements()
+    
+    if sim_state.total_time >= 1.0:  # Only profile after 1 second has passed
+        start_time = time.perf_counter()
+        draw_element(screen, "root", ui_elements, 0, 0, profile=True)
+        end_time = time.perf_counter()
+        total_render_time_ms = (end_time - start_time) * 1000
+        print(f"Total GUI render time: {total_render_time_ms:.2f} ms")
+        
+        # Breakpoint spot for pausing execution
+        breakpoint_here = True  # You can set a breakpoint on this line
+    else:
+        draw_element(screen, "root", ui_elements, 0, 0, profile=False)
+
+def draw_element(screen, element_name, all_elements, x, y, profile=False):
+    element = all_elements[element_name]
+    content_x = x + element["inner_margin"]
+    content_y = y + element["inner_margin"]
+
+    if profile:
+        start_time = time.perf_counter()
+
+    # Check if we have a cached surface for this element
+    if element_name in cached_surfaces:
+        # Blit the cached surface (background and static content)
+        screen.blit(cached_surfaces[element_name].surface, (x, y))
+    else:
+        # Draw background if color has non-zero alpha
+        background_color = element.get('background_color', (0, 0, 0, 0))
+        if background_color[3] > 0:
+            pygame.draw.rect(screen, background_color, (x, y, element["width"], element["height"]))
+
+        # Draw text for text elements
+        if element["container_type"] == "text":
+            font = element.get('font', pygame.font.Font(None, 24))
+            font_color = element.get('font_color', (255, 255, 255))
+            text_surface = font.render(element["text"], True, font_color)
+            screen.blit(text_surface, (content_x, content_y))
+
+        # Cache the element if it's cacheable
+        if element.get('cacheable', False):
+            cache_surface = pygame.Surface((element["width"], element["height"]), pygame.SRCALPHA)
+            cache_surface.blit(screen, (0, 0), (x, y, element["width"], element["height"]))
+            cached_surfaces[element_name] = CachedElement(cache_surface)
+
+    # Print rendering time for this element
+    if profile:
+        end_time = time.perf_counter()
+        render_time_ms = (end_time - start_time) * 1000
+        print(f"Element {element_name} render time: {render_time_ms:.2f} ms")
+
+    # Process child elements
+    if element["container_type"] in ["vbox", "hbox"]:
+        child_x = content_x
+        child_y = content_y
+        
+        for child_name in element["child_elements"]:
+            child = all_elements[child_name]
+            
+            # Consider the child's outer margin when positioning
+            draw_element(screen, child_name, all_elements, 
+                         child_x + child["outer_margin"], 
+                         child_y + child["outer_margin"],
+                         profile=profile)
+            
+            if element["container_type"] == "vbox":
+                child_y += child["height"] + child["outer_margin"] * 2
+            elif element["container_type"] == "hbox":
+                child_x += child["width"] + child["outer_margin"] * 2
+
+def clear_cache():
+    cached_surfaces.clear()

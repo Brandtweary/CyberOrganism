@@ -108,7 +108,7 @@ class SimulationState:
         # Update UI stats
         organism_stats = self.generate_organism_stats()
         performance_stats = self.generate_performance_stats()
-        self.ui.update_stats(organism_stats, performance_stats)
+        self.ui.update_left_sidebar(organism_stats, performance_stats)
 
         # Update last update time for interpolation
         self.last_update_time = time.time()

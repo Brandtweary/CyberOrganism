@@ -1,80 +1,111 @@
-import tkinter as tk
-from tkinter import ttk
 import pygame
 
 class UI:
     def __init__(self):
-        self.root = None
-        self.screen = None
-        self.clock = None
-        self.font = None
-        self.stats_frame = None
-        self.canvas = None
+        pygame.init()
+        self.WIDTH, self.HEIGHT = pygame.display.Info().current_w, pygame.display.Info().current_h
+        self.TITLE = "Simulation"
+        self.BLACK = (0, 0, 0, 255)
+        self.GRAY = (50, 50, 50, 255)
+        self.NEON_GREEN = (57, 255, 20, 255)
+        self.SIDEBAR_WIDTH = 350
+        self.FONT = pygame.font.Font(None, 24)
+        self.ui_elements = self.initialize_ui_elements()
+
+    def initialize_ui_elements(self):
+        elements = {
+            "root": {
+                "height": self.HEIGHT,
+                "width": self.WIDTH,
+                "outer_margin": 0,
+                "inner_margin": 0,
+                "container_type": "hbox",
+                "child_elements": ["left_sidebar", "simulation_area"],
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+            },
+            "left_sidebar": {
+                "height": self.HEIGHT,
+                "width": self.SIDEBAR_WIDTH,
+                "outer_margin": 0,
+                "inner_margin": 10,
+                "container_type": "vbox",
+                "child_elements": ["organism_stats", "performance_stats"],
+                "background_color": self.GRAY,
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": True
+            },
+            "simulation_area": {
+                "height": self.HEIGHT,
+                "width": self.WIDTH - self.SIDEBAR_WIDTH,
+                "outer_margin": 0,
+                "inner_margin": 0,
+                "container_type": "vbox",
+                "child_elements": [],
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+            },
+            "organism_stats": {
+                "height": self.HEIGHT // 2,
+                "width": self.SIDEBAR_WIDTH,
+                "outer_margin": 5,
+                "inner_margin": 5,
+                "container_type": "vbox",
+                "child_elements": ["organism_stats_title"],
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+            },
+            "organism_stats_title": {
+                "height": 30,
+                "width": self.SIDEBAR_WIDTH - 20,
+                "outer_margin": 0,
+                "inner_margin": 5,
+                "container_type": "text",
+                "text": "Organism Statistics",
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+            },
+            "performance_stats": {
+                "height": self.HEIGHT // 2,
+                "width": self.SIDEBAR_WIDTH,
+                "outer_margin": 5,
+                "inner_margin": 5,
+                "container_type": "vbox",
+                "child_elements": ["performance_stats_title"],
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+            },
+            "performance_stats_title": {
+                "height": 30,
+                "width": self.SIDEBAR_WIDTH - 20,
+                "outer_margin": 0,
+                "inner_margin": 5,
+                "container_type": "text",
+                "text": "Performance Statistics",
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+            }
+        }
+        return elements
 
     def create_window(self):
-        self.root = tk.Tk()
-        self.root.title("Simulation")
-        self.root.geometry("1920x1080")
-
-        # Create main frame
-        main_frame = ttk.Frame(self.root)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # Create sidebar frame
-        sidebar_frame = ttk.Frame(main_frame, width=300, style="Sidebar.TFrame")
-        sidebar_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
-
-        # Create stats frame (scrollable)
-        stats_canvas = tk.Canvas(sidebar_frame, width=280)
-        self.stats_frame = ttk.Frame(stats_canvas)
-        scrollbar = ttk.Scrollbar(sidebar_frame, orient="vertical", command=stats_canvas.yview)
-        stats_canvas.configure(yscrollcommand=scrollbar.set)
-
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        stats_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        stats_canvas.create_window((0, 0), window=self.stats_frame, anchor="nw")
-
-        self.stats_frame.bind("<Configure>", lambda e: stats_canvas.configure(scrollregion=stats_canvas.bbox("all")))
-
-        # Create Pygame canvas
-        self.canvas = tk.Canvas(main_frame, width=1620, height=1080, bg="black")
-        self.canvas.pack(side=tk.RIGHT)
-
-        # Initialize Pygame
-        pygame.init()
-        self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 24)
-        self.screen = pygame.Surface((1620, 1080))
-
-        # Configure style
-        style = ttk.Style()
-        style.configure("Sidebar.TFrame", background="gray20")
-        style.configure("Stats.TLabel", background="gray20", foreground="lawn green")
-
-        return self.root, self.screen, self.clock, self.font
-
-    def update_stats(self, organism_stats, performance_stats):
-        # Clear existing stats
-        for widget in self.stats_frame.winfo_children():
-            widget.destroy()
-
-        # Add organism stats
-        ttk.Label(self.stats_frame, text="Organism Statistics", font=("Any", 14), style="Stats.TLabel").pack(anchor="w")
-        for stat in organism_stats:
-            ttk.Label(self.stats_frame, text=stat, style="Stats.TLabel").pack(anchor="w")
-
-        # Add a separator
-        ttk.Separator(self.stats_frame, orient="horizontal").pack(fill="x", pady=5)
-
-        # Add performance stats
-        ttk.Label(self.stats_frame, text="Performance Statistics", font=("Any", 14), style="Stats.TLabel").pack(anchor="w")
-        for stat in performance_stats:
-            ttk.Label(self.stats_frame, text=stat, style="Stats.TLabel").pack(anchor="w")
-
-    def blit_pygame_surface(self):
-        photo_image = tk.PhotoImage(data=pygame.image.tostring(self.screen, 'RGB'))
-        self.canvas.create_image(0, 0, image=photo_image, anchor=tk.NW)
-        self.canvas.image = photo_image  # Keep a reference to prevent garbage collection
+        display = pygame.display.set_mode((self.WIDTH, self.HEIGHT), pygame.FULLSCREEN)
+        pygame.display.set_caption(self.TITLE)
+        clock = pygame.time.Clock()
+        return display, clock
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -85,6 +116,45 @@ class UI:
                     return False
         return True
 
-    def run(self):
-        self.root.update()
-        return self.handle_events()
+    def update_left_sidebar(self, organism_stats, performance_stats):
+        # Clear existing stat blocks
+        self.ui_elements["organism_stats"]["child_elements"] = ["organism_stats_title"]
+        self.ui_elements["performance_stats"]["child_elements"] = ["performance_stats_title"]
+
+        # Add new organism stat blocks
+        for i, stat in enumerate(organism_stats):
+            stat_block_name = f"organism_stat_{i}"
+            self.ui_elements[stat_block_name] = {
+                "height": 25,
+                "width": self.SIDEBAR_WIDTH - 20,
+                "outer_margin": 0,
+                "inner_margin": 5,
+                "container_type": "text",
+                "text": stat,
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+            }
+            self.ui_elements["organism_stats"]["child_elements"].append(stat_block_name)
+
+        # Add new performance stat blocks
+        for i, stat in enumerate(performance_stats):
+            stat_block_name = f"performance_stat_{i}"
+            self.ui_elements[stat_block_name] = {
+                "height": 25,
+                "width": self.SIDEBAR_WIDTH - 20,
+                "outer_margin": 0,
+                "inner_margin": 5,
+                "container_type": "text",
+                "text": stat,
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+
+            }
+            self.ui_elements["performance_stats"]["child_elements"].append(stat_block_name)
+
+    def get_ui_elements(self):
+        return self.ui_elements
