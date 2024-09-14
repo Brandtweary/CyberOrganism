@@ -179,7 +179,7 @@ class StateSnapshot:
             for obj in collision_objects:
                 # Check if the object is consumable
                 if obj.consumable:
-                    obj.consume(organism)
+                    obj.consume(org_state)
                     item_state = self.get_state(obj.id)
                     if item_state:
                         item_state['marked_for_deletion'] = True

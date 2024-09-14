@@ -24,7 +24,7 @@ class Item:
         self.synchronized_params: List[str] = []
         self.param_count: int = 0
 
-    def consume(self, organism):
+    def consume(self, organism_state: Dict[str, Any]):
         pass
     
     def update_state(self, state_snapshot: StateSnapshot) -> Dict[str, Any]:

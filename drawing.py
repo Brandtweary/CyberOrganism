@@ -8,7 +8,7 @@ def draw_simulation(screen, sim_state):
     draw_items(screen, sim_state)
     draw_attention_points(screen, sim_state)
     draw_organisms(screen, sim_state)
-    draw_gui(screen, sim_state.ui, sim_state)
+    draw_gui(screen, sim_state.ui)
 
 def draw_items(screen, sim_state):
     # Collect all nearest item IDs from organisms

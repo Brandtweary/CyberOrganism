@@ -1,5 +1,5 @@
 from items import Item, register_item_class
-from typing import Tuple
+from typing import Tuple, Dict, Any
 
 @register_item_class('food')
 class Food(Item):
@@ -13,7 +13,7 @@ class Food(Item):
         self.reward = energy + 5 * nutrition
         self.consumable = True
 
-    def consume(self, organism):
-        organism.energy += self.energy
-        organism.nutrition += self.nutrition
-        organism.current_reward += self.reward
+    def consume(self, organism_state: Dict[str, Any]):
+        organism_state['energy'] += self.energy
+        organism_state['nutrition'] += self.nutrition
+        organism_state['current_reward'] += self.reward
