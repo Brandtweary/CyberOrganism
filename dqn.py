@@ -50,16 +50,14 @@ class DQN(ReinforcementLearningAlgorithm):
         action_index = np.random.choice(self.output_size, p=probabilities)
         return action_index
 
-    def learn(self) -> Dict[str, float]:
+    def learn(self) -> Dict[str, Any]:
         if not self.organism.replay_buffer.can_sample():
-            return {"avg_loss": 0.0, "avg_q_value": 0.0, "avg_expected_q_value": 0.0}
+            return {}
 
         batch, idxs = self.organism.replay_buffer.sample()
         
         self.optimizer.zero_grad()
-        total_loss = 0
-        total_q_value = 0
-        total_expected_q_value = 0
+        metrics = {action_value: {"loss": [], "current_q": [], "expected_q": []} for action_value in self.action_mapping.keys()}
         
         for i, experience in enumerate(batch):
             state, action, reward, next_state = experience
@@ -79,9 +77,9 @@ class DQN(ReinforcementLearningAlgorithm):
             
             loss.backward()
             
-            total_loss += loss.item()
-            total_q_value += current_q_value.item()
-            total_expected_q_value += expected_q_value.item()
+            metrics[action.value]["loss"].append(loss.item())
+            metrics[action.value]["current_q"].append(current_q_value.item())
+            metrics[action.value]["expected_q"].append(expected_q_value.item())
 
             td_error = abs(current_q_value.item() - expected_q_value.item())
             self.organism.replay_buffer.update_priorities([idxs[i]], [td_error])
@@ -90,21 +88,13 @@ class DQN(ReinforcementLearningAlgorithm):
         
         self.optimizer.step()
 
-        avg_loss = total_loss / len(batch)
-        avg_q_value = total_q_value / len(batch)
-        avg_expected_q_value = total_expected_q_value / len(batch)
-
         self.organism.training_steps += 1
         if self.organism.training_steps % self.organism.target_update == 0:
             self.update_target_network()
 
         self.decay_epsilon()
 
-        return {
-            "avg_loss": avg_loss,
-            "avg_q_value": avg_q_value,
-            "avg_expected_q_value": avg_expected_q_value
-        }
+        return metrics
 
     def update_target_network(self) -> None:
         self.target_network.load_state_dict(self.main_network.state_dict())

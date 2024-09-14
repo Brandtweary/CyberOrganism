@@ -65,14 +65,12 @@ def draw_organisms(screen, sim_state):
 def draw_gui(screen, ui):
     ui_elements = ui.get_ui_elements()
     
-    # Draw background elements
     for element_name, element in ui_elements.items():
         background_color = element.get('background_color', (0, 0, 0, 0))
         if background_color[3] > 0:
             pygame.draw.rect(screen, background_color, 
                              (element['x'], element['y'], element['width'], element['height']))
 
-    # Draw text elements
     text_elements = []
     for element_name, element in ui_elements.items():
         if element['container_type'] == 'text':
@@ -83,7 +81,6 @@ def draw_gui(screen, ui):
                 (element['x'] + element['inner_margin'], element['y'] + element['inner_margin'])
             ))
 
-    # Batch render text
     for text, font, color, position in text_elements:
         text_surface = font.render(text, True, color)
         screen.blit(text_surface, position)

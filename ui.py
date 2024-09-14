@@ -33,11 +33,11 @@ class UI:
                 "outer_margin": 0,
                 "inner_margin": 10,
                 "container_type": "vbox",
-                "child_elements": ["organism_stats", "performance_stats"],
+                "child_elements": ["organism_stats", "performance_stats", "training_metrics"],
                 "background_color": self.GRAY,
                 "font": self.FONT,
                 "font_color": self.NEON_GREEN,
-                "cacheable": True
+                "cacheable": False
             },
             "simulation_area": {
                 "height": self.HEIGHT,
@@ -52,7 +52,7 @@ class UI:
                 "cacheable": False
             },
             "organism_stats": {
-                "height": self.HEIGHT // 2,
+                "height": self.HEIGHT // 3,
                 "width": self.SIDEBAR_WIDTH,
                 "outer_margin": 5,
                 "inner_margin": 5,
@@ -76,7 +76,7 @@ class UI:
                 "cacheable": False
             },
             "performance_stats": {
-                "height": self.HEIGHT // 2,
+                "height": self.HEIGHT // 3,
                 "width": self.SIDEBAR_WIDTH,
                 "outer_margin": 5,
                 "inner_margin": 5,
@@ -94,6 +94,30 @@ class UI:
                 "inner_margin": 5,
                 "container_type": "text",
                 "text": "Performance Statistics",
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+            },
+            "training_metrics": {
+                "height": self.HEIGHT // 3,
+                "width": self.SIDEBAR_WIDTH,
+                "outer_margin": 5,
+                "inner_margin": 5,
+                "container_type": "vbox",
+                "child_elements": ["training_metrics_title"],
+                "background_color": (0, 0, 0, 0),
+                "font": self.FONT,
+                "font_color": self.NEON_GREEN,
+                "cacheable": False
+            },
+            "training_metrics_title": {
+                "height": 30,
+                "width": self.SIDEBAR_WIDTH - 20,
+                "outer_margin": 0,
+                "inner_margin": 5,
+                "container_type": "text",
+                "text": "Training Metrics",
                 "background_color": (0, 0, 0, 0),
                 "font": self.FONT,
                 "font_color": self.NEON_GREEN,
@@ -139,9 +163,10 @@ class UI:
                     return False
         return True
 
-    def update_left_sidebar(self, organism_stats, performance_stats):
+    def update_left_sidebar(self, organism_stats, performance_stats, training_metrics):
         old_organism_count = len(self.ui_elements["organism_stats"]["child_elements"]) - 1
         old_performance_count = len(self.ui_elements["performance_stats"]["child_elements"]) - 1
+        old_training_metrics_count = len(self.ui_elements["training_metrics"]["child_elements"]) - 1
         
         # Update organism stats
         self.update_stats("organism_stats", organism_stats, old_organism_count)
@@ -149,10 +174,40 @@ class UI:
         # Update performance stats
         self.update_stats("performance_stats", performance_stats, old_performance_count)
         
+        # Update training metrics
+        training_metrics_list = self.format_training_metrics(training_metrics)
+        self.update_stats("training_metrics", training_metrics_list, old_training_metrics_count)
+        
         # Reposition elements if the number of stats changed
         if (len(organism_stats) != old_organism_count or 
-            len(performance_stats) != old_performance_count):
+            len(performance_stats) != old_performance_count or
+            len(training_metrics_list) != old_training_metrics_count):
             self.position_ui_elements()
+
+    def format_training_metrics(self, training_metrics):
+        formatted_metrics = []
+        
+        # Add combined averages
+        combined = training_metrics["combined_averages"]
+        formatted_metrics.extend([
+            f"Combined Loss: {combined['loss_window_avg']:.4f}",
+            f"Combined Q-Value: {combined['current_q_window_avg']:.4f}",
+            f"Combined Expected Q: {combined['expected_q_window_avg']:.4f}"
+        ])
+        
+        # Add reward
+        formatted_metrics.append(f"Reward: {training_metrics['reward']['reward_window_avg']:.4f}")
+        
+        # Add metrics for each action
+        for action, metrics in training_metrics.items():
+            if action not in ["combined_averages", "reward"]:
+                formatted_metrics.extend([
+                    f"Action {action} Loss: {metrics['loss_window_avg']:.4f}",
+                    f"Action {action} Q-Value: {metrics['current_q_window_avg']:.4f}",
+                    f"Action {action} Expected Q: {metrics['expected_q_window_avg']:.4f}"
+                ])
+        
+        return formatted_metrics
 
     def update_stats(self, stats_type, new_stats, old_count):
         self.ui_elements[stats_type]["child_elements"] = [f"{stats_type}_title"]

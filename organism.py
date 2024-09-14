@@ -34,17 +34,13 @@ class Organism:
             'organism_attention_distance',
             'organism_attention_direction'
         ]
-        self._set_input_parameters()  # all default to 0.0
+        self.set_input_parameters()  # all default to 0.0
 
         # HUD Display Parameters
         self.display_parameters: List[str] = [
             'energy',
             'nutrition',
-            'epsilon',
-            'loss_window_avg',
-            'reward_window_avg',
-            'q_value_window_avg',
-            'expected_q_value_window_avg'
+            'epsilon'
         ]
         
         # Simulation State Parameters
@@ -85,14 +81,7 @@ class Organism:
 
         # Training Metrics
         self.window_size = 100
-        self.loss_history = deque(maxlen=self.window_size)
-        self.q_value_history = deque(maxlen=self.window_size)
-        self.expected_q_history = deque(maxlen=self.window_size)
-        self.reward_history = deque(maxlen=self.window_size)
-        self.loss_window_avg = 0.0
-        self.q_value_window_avg = 0.0
-        self.expected_q_value_window_avg = 0.0
-        self.reward_window_avg = 0.0
+        self.training_metrics = self.initialize_training_metrics()
 
         # Current Experience (Working) Memory
         self.current_experience: Optional[Experience] = None
@@ -118,10 +107,32 @@ class Organism:
             learning_rate=self.learning_rate
         ) 
 
-    def _set_input_parameters(self) -> None:
+    def set_input_parameters(self) -> None:
         """Initialize all input parameters to 0.0."""
         for param in self.input_parameters:
             self.__setattr__(param, 0.0)
+    
+    def create_metric_structure(self) -> Dict[str, Any]:
+        return {
+            "loss_history": deque(maxlen=self.window_size),
+            "current_q_history": deque(maxlen=self.window_size),
+            "expected_q_history": deque(maxlen=self.window_size),
+            "loss_window_avg": 0.0,
+            "current_q_window_avg": 0.0,
+            "expected_q_window_avg": 0.0
+        }
+
+    def initialize_training_metrics(self) -> Dict[str, Any]:
+        metrics = {
+            action_value: self.create_metric_structure()
+            for action_value in self.action_mapping.keys()
+        }
+        metrics["combined_averages"] = self.create_metric_structure()
+        metrics["reward"] = {
+            "reward_history": deque(maxlen=self.window_size),
+            "reward_window_avg": 0.0
+        }
+        return metrics
 
     def get_internal_state(self, external_state: StateSnapshot) -> torch.Tensor:
         """Compute and return the internal state of the organism."""
@@ -344,17 +355,42 @@ class Organism:
         metrics = self.RL_algorithm.learn()
         self.record_training_metrics(metrics, total_reward)
 
-    def record_training_metrics(self, metrics: Dict[str, float], total_reward: float) -> None:
+    def record_training_metrics(self, metrics: Dict[str, Any], total_reward: float) -> None:
         """Record and update training metrics including loss, Q-values, and rewards."""
-        self.loss_history.append(metrics["avg_loss"])
-        self.q_value_history.append(metrics["avg_q_value"])
-        self.expected_q_history.append(metrics["avg_expected_q_value"])
-        self.reward_history.append(total_reward)
-        
-        self.loss_window_avg = sum(self.loss_history) / len(self.loss_history)
-        self.q_value_window_avg = sum(self.q_value_history) / len(self.q_value_history)
-        self.expected_q_value_window_avg = sum(self.expected_q_history) / len(self.expected_q_history)
-        self.reward_window_avg = sum(self.reward_history) / len(self.reward_history)
+        combined_loss = []
+        combined_current_q = []
+        combined_expected_q = []
+
+        for action_value, action_metrics in metrics.items():
+            if action_metrics["loss"]:
+                self.training_metrics[action_value]["loss_history"].extend(action_metrics["loss"])
+                self.training_metrics[action_value]["current_q_history"].extend(action_metrics["current_q"])
+                self.training_metrics[action_value]["expected_q_history"].extend(action_metrics["expected_q"])
+                
+                self.training_metrics[action_value]["loss_window_avg"] = sum(self.training_metrics[action_value]["loss_history"]) / len(self.training_metrics[action_value]["loss_history"])
+                self.training_metrics[action_value]["current_q_window_avg"] = sum(self.training_metrics[action_value]["current_q_history"]) / len(self.training_metrics[action_value]["current_q_history"])
+                self.training_metrics[action_value]["expected_q_window_avg"] = sum(self.training_metrics[action_value]["expected_q_history"]) / len(self.training_metrics[action_value]["expected_q_history"])
+
+                combined_loss.extend(action_metrics["loss"])
+                combined_current_q.extend(action_metrics["current_q"])
+                combined_expected_q.extend(action_metrics["expected_q"])
+
+        if combined_loss:
+            avg_loss = sum(combined_loss) / len(combined_loss)
+            avg_current_q = sum(combined_current_q) / len(combined_current_q)
+            avg_expected_q = sum(combined_expected_q) / len(combined_expected_q)
+
+            self.training_metrics["combined_averages"]["loss_history"].append(avg_loss)
+            self.training_metrics["combined_averages"]["current_q_history"].append(avg_current_q)
+            self.training_metrics["combined_averages"]["expected_q_history"].append(avg_expected_q)
+            
+            self.training_metrics["combined_averages"]["loss_window_avg"] = sum(self.training_metrics["combined_averages"]["loss_history"]) / len(self.training_metrics["combined_averages"]["loss_history"])
+            self.training_metrics["combined_averages"]["current_q_window_avg"] = sum(self.training_metrics["combined_averages"]["current_q_history"]) / len(self.training_metrics["combined_averages"]["current_q_history"])
+            self.training_metrics["combined_averages"]["expected_q_window_avg"] = sum(self.training_metrics["combined_averages"]["expected_q_history"]) / len(self.training_metrics["combined_averages"]["expected_q_history"])
+
+        # Record the total reward
+        self.training_metrics["reward"]["reward_history"].append(total_reward)
+        self.training_metrics["reward"]["reward_window_avg"] = sum(self.training_metrics["reward"]["reward_history"]) / len(self.training_metrics["reward"]["reward_history"])
 
     def update_metabolism(self) -> Dict[str, Any]:
         """Update the organism's energy and nutrition levels, and check for reproduction."""

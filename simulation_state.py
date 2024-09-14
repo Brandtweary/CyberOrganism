@@ -11,6 +11,7 @@ class SimulationState:
         self.test_organism = simulation_engine.test_organism
         self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
         self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
+        self.training_metrics = self.test_organism.training_metrics
         self.cpu_usage = psutil.cpu_percent()
         self.memory_usage = psutil.virtual_memory().percent
         self.available_memory = psutil.virtual_memory().available / (1024 * 1024)
@@ -79,9 +80,10 @@ class SimulationState:
         self.current_state = self.sim_engine.current_state
         self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
         self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
+        self.training_metrics = self.test_organism.training_metrics
         
         # Update summary statistics
-        current_loss = self.display_parameters['loss_window_avg']
+        current_loss = self.training_metrics['combined_averages']['loss_window_avg']
         if current_loss < 0.5:
             self.time_low_loss += self.sim_engine.UPDATE_INTERVAL
         self.total_time = time.time() - self.start_time
