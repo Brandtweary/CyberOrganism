@@ -18,6 +18,7 @@ class SimulationEngine:
         self.UPDATE_INTERVAL = 1.0 / 30
         self.CAMERA_PAN_SPEED = 200
         self.MAX_FOOD_ITEMS = 12
+        self.CAMERA_PAN_THRESHOLD = 5
         self.collision_range = 2 
 
         # Colors
@@ -58,14 +59,14 @@ class SimulationEngine:
         viewport_width, viewport_height = self.ui.get_viewport_dimensions()
         dx = dy = 0
 
-        if mouse_x <= 10:
+        if mouse_x <= self.CAMERA_PAN_THRESHOLD:
             dx = -self.CAMERA_PAN_SPEED / self.FPS
-        elif mouse_x >= viewport_width - 10:
+        elif mouse_x >= viewport_width - self.CAMERA_PAN_THRESHOLD:
             dx = self.CAMERA_PAN_SPEED / self.FPS
 
-        if mouse_y <= 10:
+        if mouse_y <= self.CAMERA_PAN_THRESHOLD:
             dy = -self.CAMERA_PAN_SPEED / self.FPS
-        elif mouse_y >= viewport_height - 10:
+        elif mouse_y >= viewport_height - self.CAMERA_PAN_THRESHOLD:
             dy = self.CAMERA_PAN_SPEED / self.FPS
 
         if dx != 0 or dy != 0:

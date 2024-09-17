@@ -14,11 +14,18 @@ class UI:
         self.setup_ui()
 
     def setup_ui(self):
+        # Load custom font
+        with dpg.font_registry():
+            default_font = dpg.add_font("fonts/Roboto_Mono/static/RobotoMono-Regular.ttf", 22, pixel_snapH=True)        
+        
+        # Set default font
+        dpg.bind_font(default_font)
+
         # Create the main viewport
         dpg.create_viewport(title=self.TITLE, width=self.WIDTH, height=self.HEIGHT)
 
         # Create the main window
-        with dpg.window(label="Main", tag="main_window"):
+        with dpg.window(label="Main", tag="main_window", autosize=True):
             with dpg.window(label="Simulation", no_title_bar=True, no_move=True, no_resize=True, tag="sim_window"):
                 dpg.add_drawlist(width=self.WIDTH, height=self.HEIGHT, tag="sim_area")
 
@@ -53,7 +60,7 @@ class UI:
 
         dpg.bind_item_theme("main_window", main_window_theme)
 
-        # Set the global font color
+        # Set the global font color and font
         with dpg.theme() as global_theme:
             with dpg.theme_component(dpg.mvAll):
                 dpg.add_theme_color(dpg.mvThemeCol_Text, (0, 255, 0))  # Neon green
@@ -68,11 +75,6 @@ class UI:
         dpg.setup_dearpygui()
         dpg.show_viewport()
         dpg.toggle_viewport_fullscreen()
-        print("Viewport dimensions:", self.get_viewport_dimensions())
-        # Debug statement to check main window dimensions
-        main_window_width = dpg.get_item_width("main_window")
-        main_window_height = dpg.get_item_height("main_window")
-        print(f"Main window dimensions: {main_window_width}x{main_window_height}")
     
     def exit_callback(self):
         self.should_exit = True
@@ -104,24 +106,10 @@ class UI:
         return "\n".join(formatted_metrics)
 
     def update(self, sim_state):
-        viewport_width, viewport_height = self.get_viewport_dimensions()
-
         with dpg.mutex():
-            dpg.hide_item("sim_window")
-            dpg.hide_item("sidebar_window")
-            dpg.configure_item("sim_area", width=viewport_width, height=viewport_height)
-            # Clear the existing drawlist
             dpg.delete_item("sim_area", children_only=True)
-            
-            # Redraw the simulation using the existing drawlist
             draw_simulation("sim_area", sim_state)
-            
-            dpg.show_item("sim_window")
-            dpg.show_item("sidebar_window")
 
-            sidebar_dimensions = dpg.get_item_width("sidebar"), dpg.get_item_height("sidebar")
-            main_window_dimensions = dpg.get_item_width("main_window"), dpg.get_item_height("main_window")
-        
         dpg.render_dearpygui_frame()
         
     def should_quit(self):
