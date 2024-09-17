@@ -1,16 +1,24 @@
-import pygame
+import dearpygui.dearpygui as dpg
 from state_snapshot import ObjectType
-import time
 
 
-def draw_simulation(screen, sim_state):
-    screen.fill(sim_state.sim_engine.BLACK)
-    draw_items(screen, sim_state)
-    draw_attention_points(screen, sim_state)
-    draw_organisms(screen, sim_state)
-    draw_gui(screen, sim_state.ui)
+def draw_simulation(layer_id, sim_state):
+    draw_background(layer_id, sim_state)
+    draw_items(layer_id, sim_state)
+    draw_attention_points(layer_id, sim_state)
+    draw_organisms(layer_id, sim_state)
 
-def draw_items(screen, sim_state):
+def draw_background(layer_id, sim_state):
+    dpg.draw_rectangle(
+        (0, 0),
+        (sim_state.ui.WIDTH, sim_state.ui.HEIGHT),
+        parent=layer_id,
+        fill=(0, 0, 0, 255),
+        thickness=0,
+        color=(0, 0, 0, 0)
+    )
+
+def draw_items(layer_id, sim_state):
     # Collect all nearest item IDs from organisms
     nearest_item_ids = set()
     for org_id, org_state in sim_state.current_state.get_objects_in_snapshot(ObjectType.ORGANISM):
@@ -28,14 +36,26 @@ def draw_items(screen, sim_state):
             halo_size = sim_state.sim_engine.CELL_SIZE * 3  # 3x3 grid including the item
             halo_x = screen_x - sim_state.sim_engine.CELL_SIZE
             halo_y = screen_y - sim_state.sim_engine.CELL_SIZE
-            pygame.draw.rect(screen, (255, 165, 0),  # Orange color
-                             (halo_x, halo_y, halo_size, halo_size))
+            dpg.draw_rectangle(
+                (halo_x, halo_y),
+                (halo_x + halo_size, halo_y + halo_size),
+                parent=layer_id,
+                fill=(255, 165, 0, 100), 
+                thickness=0,
+                color=(0, 0, 0, 0)  # you have to explicitly set the border to transparent
+            )
         
         # Draw the item
-        pygame.draw.rect(screen, item_state['color'], (screen_x, screen_y, sim_state.sim_engine.CELL_SIZE, sim_state.sim_engine.CELL_SIZE))
+        dpg.draw_rectangle(
+            (screen_x, screen_y),
+            (screen_x + sim_state.sim_engine.CELL_SIZE, screen_y + sim_state.sim_engine.CELL_SIZE),
+            parent=layer_id,
+            fill=item_state['color'],
+            thickness=0,
+            color=(0, 0, 0, 0)
+        )
 
-
-def draw_attention_points(screen, sim_state):
+def draw_attention_points(layer_id, sim_state):
     for org_id, org_state in sim_state.current_state.get_objects_in_snapshot(ObjectType.ORGANISM):
         attention_x, attention_y = org_state['attention_x'], org_state['attention_y']
         screen_x, screen_y = sim_state.sim_engine.grid_to_screen(attention_x, attention_y)
@@ -51,36 +71,23 @@ def draw_attention_points(screen, sim_state):
         centered_y = screen_y - offset
         
         # Draw the attention point
-        pygame.draw.rect(screen, sim_state.sim_engine.RED, 
-                            (centered_x, centered_y, attention_size, attention_size))
+        dpg.draw_rectangle(
+            (centered_x, centered_y),
+            (centered_x + attention_size, centered_y + attention_size),
+            parent=layer_id,
+            fill=sim_state.sim_engine.RED,
+            thickness=0,
+            color=(0, 0, 0, 0)
+        )
 
-
-def draw_organisms(screen, sim_state):
+def draw_organisms(layer_id, sim_state):
     for org_id, org_state in sim_state.current_state.get_objects_in_snapshot(ObjectType.ORGANISM):
         screen_x, screen_y = sim_state.sim_engine.grid_to_screen(org_state['x'], org_state['y'])
-        if 0 <= screen_x < sim_state.sim_engine.SCREEN_WIDTH and 0 <= screen_y < sim_state.sim_engine.SCREEN_HEIGHT:
-            rect = pygame.Rect(screen_x, screen_y, sim_state.sim_engine.CELL_SIZE, sim_state.sim_engine.CELL_SIZE)
-            pygame.draw.rect(screen, sim_state.sim_engine.NEON_GREEN, rect)
-
-def draw_gui(screen, ui):
-    ui_elements = ui.get_ui_elements()
-    
-    for element_name, element in ui_elements.items():
-        background_color = element.get('background_color', (0, 0, 0, 0))
-        if background_color[3] > 0:
-            pygame.draw.rect(screen, background_color, 
-                             (element['x'], element['y'], element['width'], element['height']))
-
-    text_elements = []
-    for element_name, element in ui_elements.items():
-        if element['container_type'] == 'text':
-            text_elements.append((
-                element['text'],
-                element['font'],
-                element['font_color'],
-                (element['x'] + element['inner_margin'], element['y'] + element['inner_margin'])
-            ))
-
-    for text, font, color, position in text_elements:
-        text_surface = font.render(text, True, color)
-        screen.blit(text_surface, position)
+        dpg.draw_rectangle(
+            (screen_x, screen_y),
+            (screen_x + sim_state.sim_engine.CELL_SIZE, screen_y + sim_state.sim_engine.CELL_SIZE),
+            parent=layer_id,
+            fill=sim_state.sim_engine.NEON_GREEN,
+            thickness=0,
+            color=(0, 0, 0, 0)
+        )

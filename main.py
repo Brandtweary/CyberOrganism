@@ -1,50 +1,45 @@
 from ui import UI
-import pygame
 from organism import Organism
 from simulation_engine import SimulationEngine
 import time
-from drawing import draw_simulation
 from simulation_state import SimulationState
 
 
 def main():
     ui = UI()
-    display, clock = ui.create_window()
+    simulation_engine = SimulationEngine(ui)
     
-    simulation_engine = SimulationEngine()
-    
-    initial_x, initial_y = simulation_engine.GRID_SIZE // 2, simulation_engine.GRID_SIZE // 2
+    initial_x, initial_y = simulation_engine.viewport_cell_center_x, simulation_engine.viewport_cell_center_y
     test_organism = simulation_engine.create_organism(Organism, (initial_x, initial_y), simulation_engine.current_state)
     simulation_engine.test_organism = test_organism
 
-    sim_state = SimulationState(simulation_engine, clock, ui)
+    sim_state = SimulationState(simulation_engine, ui)
     
-    run_simulation(ui, display, clock, sim_state)
+    run_simulation(sim_state)
     
-    pygame.quit()
+    print_final_summary(sim_state)
+    ui.cleanup()
 
-def run_simulation(ui, display, clock, sim_state):
+def run_simulation(sim_state):
     running = True
     last_print_time = time.time()
     update_times, draw_times, total_frame_times = [], [], []
     frame_count = 0
+    frame_time = 1.0 / sim_state.sim_engine.FPS
     
     while running:
-        running = ui.handle_events()
-        if not running:
-            break
+        frame_start = time.time()
         
         if sim_state.total_time >= 0.5:
             sim_state.sim_engine.handle_camera_panning()
         
         update_start_time = time.time()
-        if frame_count % 2 == 0:
+        if frame_count % 2 == 0:  # Simulation runs at 30 FPS
             sim_state.update()
             update_times.append(time.time() - update_start_time)
 
         draw_start_time = time.time()
-        draw_simulation(display, sim_state)
-        pygame.display.flip()
+        sim_state.ui.update(sim_state) # Rendering runs at 60 FPS
         draw_times.append(time.time() - draw_start_time)
 
         if frame_count % 2 == 0:
@@ -56,10 +51,15 @@ def run_simulation(ui, display, clock, sim_state):
             last_print_time = current_time
             update_times, draw_times, total_frame_times = [], [], []
 
-        clock.tick(60)
         frame_count += 1
-    
-    print_final_summary(sim_state)
+        
+        # Control frame rate
+        frame_end = time.time()
+        frame_duration = frame_end - frame_start
+        if frame_duration < frame_time:
+            time.sleep(frame_time - frame_duration)
+        
+        running = not sim_state.ui.should_quit()
 
 def print_simulation_summary(sim_state, update_times, draw_times, total_frame_times):
     print_simulation_stats(sim_state)
@@ -110,15 +110,6 @@ def print_final_summary(sim_state):
     print("\n--- Training Statistics ---")
     for stat in sim_state.generate_training_stats():
         print(stat)
-
-def handle_events():
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            return False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                return False
-    return True
 
 if __name__ == "__main__":
     main()
