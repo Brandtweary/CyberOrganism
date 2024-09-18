@@ -2,10 +2,33 @@ import dearpygui.dearpygui as dpg
 from drawing import draw_simulation
 from screeninfo import get_monitors
 
+
 class UI:
     def __init__(self):
-        self.monitor = get_monitors()[0]  # Get the primary monitor
-        self.WIDTH, self.HEIGHT = self.monitor.width, self.monitor.height
+        '''
+        There seems to be some bugs with viewport dimensions in DearPyGui.
+        1. Setting the viewport size to the screen resolution does not make it fill the screen. The client window is only 1902x1033 (it actually looks smaller than that).
+        2. Toggling fullscreen makes the text blurry. This is not the same bug as a similar reported bug with high-DPI monitors. Instead, it has to do with the viewport dimensions.
+            Artificially increasing the viewport dimensions by 20% corrects the issue. This works for 1920x1080 displays, but I don't know if it generalizes.
+        3. There is a discrepancy between the sim area size and its reported dimensions.
+            The sim area is slightly bigger than its dimensions indicate, possibly due to some internal padding.
+            This causes the sim window to have unnecessary scrollbars.
+            I determined the width and height offsets empirically on my system, essentially shrinking the sim window to fit inside the actual viewport.
+            If these values need to be calibrated dynamically, then initialization will have to iteratively detect if the sim window has a scrollbar and adjust the offsets accordingly.
+            For good measure, you may want to disable the h/v scrollbars in the sim window anyway.
+        4. There is also a discrepancy between local mouse position and the viewport, but I fixed that by using global position instead.
+            This global position must be compared to the scaled viewport dimensions, not the sim area dimensions or actual display resolution.
+            Figuring out this bug would probably resolve the other issues, but I honestly have no idea what is causing it. 
+            The local mouse position does not seem to align with any of the other coordinate systems as far as I can tell. 
+        
+        Due to these bugs, I am likely to switch away from DearPyGui in the future, but it does seem to work for now.
+        '''
+        self.monitor = get_monitors()[0]
+        self.RESOLUTION_SCALING_FACTOR = 1.2 # empirically determined
+        self.WIDTH, self.HEIGHT = int(self.monitor.width * self.RESOLUTION_SCALING_FACTOR), int(self.monitor.height * self.RESOLUTION_SCALING_FACTOR)
+        self.WIDTH_OFFSET = 410 # empirically determined
+        self.HEIGHT_OFFSET = 240 # empirically determined
+        self.SIM_WIDTH, self.SIM_HEIGHT = self.WIDTH - self.WIDTH_OFFSET, self.HEIGHT - self.HEIGHT_OFFSET  # don't ask me why this is necessary
         self.SIDEBAR_WIDTH = 350
         self.TITLE = "CyberOrganism"
         self.should_exit = False
@@ -16,54 +39,54 @@ class UI:
     def setup_ui(self):
         # Load custom font
         with dpg.font_registry():
-            default_font = dpg.add_font("fonts/Roboto_Mono/static/RobotoMono-Regular.ttf", 22, pixel_snapH=True)        
+            default_font = dpg.add_font("fonts/Roboto_Mono/static/RobotoMono-Regular.ttf", 22, pixel_snapH=False)        
         
         # Set default font
         dpg.bind_font(default_font)
+       # dpg.set_global_font_scale(0.5)
 
         # Create the main viewport
         dpg.create_viewport(title=self.TITLE, width=self.WIDTH, height=self.HEIGHT)
 
         # Create the main window
         with dpg.window(label="Main", tag="main_window", autosize=True):
-            with dpg.window(label="Simulation", no_title_bar=True, no_move=True, no_resize=True, tag="sim_window"):
-                dpg.add_drawlist(width=self.WIDTH, height=self.HEIGHT, tag="sim_area")
+            with dpg.window(label="Simulation", no_title_bar=True, no_move=True, no_resize=True, no_scrollbar=False, no_scroll_with_mouse=False, tag="sim_window"):
+                dpg.add_drawlist(width=self.SIM_WIDTH, height=self.SIM_HEIGHT, tag="sim_area")
 
-            with dpg.window(label="Sidebar", no_title_bar=True, no_move=True, no_resize=True, tag="sidebar_window"):
-                with dpg.child_window(width=self.SIDEBAR_WIDTH, height=self.HEIGHT, tag="sidebar"):
-                    dpg.add_text("Simulation Stats", color=(0, 255, 0))
-                    
-                    with dpg.collapsing_header(label="Organism Statistics", default_open=True):
-                        dpg.add_text("", tag="organism_stats")
-                    
-                    with dpg.collapsing_header(label="Performance Statistics", default_open=True):
-                        dpg.add_text("", tag="performance_stats")
-                    
-                    with dpg.collapsing_header(label="Training Metrics", default_open=True):
-                        dpg.add_text("", tag="training_metrics")
+            with dpg.window(label="Left Sidebar", width=self.SIDEBAR_WIDTH, height=self.SIM_HEIGHT, no_title_bar=True, no_move=True, no_resize=True, tag="left_sidebar"):                
+                with dpg.collapsing_header(label="Organism Statistics", default_open=True):
+                    dpg.add_text("", tag="organism_stats")
+                
+                with dpg.collapsing_header(label="Performance Statistics", default_open=True):
+                    dpg.add_text("", tag="performance_stats")
+                
+                with dpg.collapsing_header(label="Training Metrics", default_open=True):
+                    dpg.add_text("", tag="training_metrics")
 
         # Set the primary window
         dpg.set_primary_window("main_window", True)
 
         # Set the sidebar background color
         with dpg.theme() as sidebar_theme:
-            with dpg.theme_component(dpg.mvChildWindow):
+            with dpg.theme_component(dpg.mvAll):
                 dpg.add_theme_color(dpg.mvThemeCol_ChildBg, (47, 79, 79))  # Slate gray
+                dpg.add_theme_color(dpg.mvThemeCol_Border, (125, 125, 125, 100))  # Light gray with reduced alpha
 
-        dpg.bind_item_theme("sidebar", sidebar_theme)
+        dpg.bind_item_theme("left_sidebar", sidebar_theme)
 
         # Set the main window background color
         with dpg.theme() as main_window_theme:
             with dpg.theme_component(dpg.mvAll):
-                dpg.add_theme_color(dpg.mvThemeCol_WindowBg, (0, 0, 0, 255))  # Black background
-                dpg.add_theme_color(dpg.mvThemeCol_Border, (0, 0, 0, 0))  # Transparent border
+                dpg.add_theme_color(dpg.mvThemeCol_WindowBg, (0, 0, 0, 255))
 
         dpg.bind_item_theme("main_window", main_window_theme)
+        dpg.bind_item_theme("sim_window", main_window_theme)
 
         # Set the global font color and font
         with dpg.theme() as global_theme:
             with dpg.theme_component(dpg.mvAll):
                 dpg.add_theme_color(dpg.mvThemeCol_Text, (0, 255, 0))  # Neon green
+                dpg.add_theme_color(dpg.mvThemeCol_Border, (0, 0, 0, 0))  # Transparent border
 
         dpg.bind_theme(global_theme)
 
@@ -75,7 +98,7 @@ class UI:
         dpg.setup_dearpygui()
         dpg.show_viewport()
         dpg.toggle_viewport_fullscreen()
-    
+
     def exit_callback(self):
         self.should_exit = True
 
@@ -122,7 +145,8 @@ class UI:
         return dpg.get_frame_rate()
     
     def get_mouse_position(self):
-        return dpg.get_mouse_pos()
+        return dpg.get_mouse_pos(local=False)  # local position is not correct for some reason, use global and compare to viewport dimensions
     
     def get_viewport_dimensions(self):
         return dpg.get_viewport_width(), dpg.get_viewport_height()
+    

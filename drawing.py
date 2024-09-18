@@ -11,7 +11,7 @@ def draw_simulation(layer_id, sim_state):
 def draw_background(layer_id, sim_state):
     dpg.draw_rectangle(
         (0, 0),
-        (sim_state.ui.WIDTH, sim_state.ui.HEIGHT),
+        (sim_state.ui.SIM_WIDTH, sim_state.ui.SIM_HEIGHT),
         parent=layer_id,
         fill=(0, 0, 0, 255),
         thickness=0,
