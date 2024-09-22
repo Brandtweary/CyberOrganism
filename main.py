@@ -18,7 +18,6 @@ def main():
     run_simulation(sim_state)
     
     print_final_summary(sim_state)
-    ui.cleanup()
 
 def run_simulation(sim_state):
     running = True
@@ -59,7 +58,7 @@ def run_simulation(sim_state):
         if frame_duration < frame_time:
             time.sleep(frame_time - frame_duration)
         
-        running = not sim_state.ui.should_quit()
+        running = not sim_state.ui.should_exit
 
 def print_simulation_summary(sim_state, update_times, draw_times, total_frame_times):
     print_simulation_stats(sim_state)

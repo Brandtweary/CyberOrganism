@@ -1,111 +1,95 @@
-import dearpygui.dearpygui as dpg
-from drawing import draw_simulation
+import sys
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QSizePolicy, QStackedLayout
+from PySide6.QtGui import QFont, QColor, QPalette, QCursor
+from PySide6.QtCore import Qt, QSize
+from drawing import draw_simulation  # Assuming this is your drawing function
 from screeninfo import get_monitors
-
 
 class UI:
     def __init__(self):
-        '''
-        There seems to be some bugs with viewport dimensions in DearPyGui.
-        1. Setting the viewport size to the screen resolution does not make it fill the screen. The client window is only 1902x1033 (it actually looks smaller than that).
-        2. Toggling fullscreen makes the text blurry. This is not the same bug as a similar reported bug with high-DPI monitors. Instead, it has to do with the viewport dimensions.
-            Artificially increasing the viewport dimensions by 20% corrects the issue. This works for 1920x1080 displays, but I don't know if it generalizes.
-        3. There is a discrepancy between the sim area size and its reported dimensions.
-            The sim area is slightly bigger than its dimensions indicate, possibly due to some internal padding.
-            This causes the sim window to have unnecessary scrollbars.
-            I determined the width and height offsets empirically on my system, essentially shrinking the sim window to fit inside the actual viewport.
-            If these values need to be calibrated dynamically, then initialization will have to iteratively detect if the sim window has a scrollbar and adjust the offsets accordingly.
-            For good measure, you may want to disable the h/v scrollbars in the sim window anyway.
-        4. There is also a discrepancy between local mouse position and the viewport, but I fixed that by using global position instead.
-            This global position must be compared to the scaled viewport dimensions, not the sim area dimensions or actual display resolution.
-            Figuring out this bug would probably resolve the other issues, but I honestly have no idea what is causing it. 
-            The local mouse position does not seem to align with any of the other coordinate systems as far as I can tell. 
-        
-        Due to these bugs, I am likely to switch away from DearPyGui in the future, but it does seem to work for now.
-        '''
-        self.monitor = get_monitors()[0]
-        self.RESOLUTION_SCALING_FACTOR = 1.2 # empirically determined
-        self.WIDTH, self.HEIGHT = int(self.monitor.width * self.RESOLUTION_SCALING_FACTOR), int(self.monitor.height * self.RESOLUTION_SCALING_FACTOR)
-        self.WIDTH_OFFSET = 410 # empirically determined
-        self.HEIGHT_OFFSET = 240 # empirically determined
-        self.SIM_WIDTH, self.SIM_HEIGHT = self.WIDTH - self.WIDTH_OFFSET, self.HEIGHT - self.HEIGHT_OFFSET  # don't ask me why this is necessary
-        self.SIDEBAR_WIDTH = 350
-        self.TITLE = "CyberOrganism"
+        self.app = QApplication(sys.argv)
+        self.main_window = QMainWindow()
         self.should_exit = False
 
-        dpg.create_context()
+        # Get monitor information
+        self.monitor = get_monitors()[0]
+        self.WIDTH, self.HEIGHT = self.monitor.width, self.monitor.height
+
+        # Set up UI elements
         self.setup_ui()
 
     def setup_ui(self):
-        # Load custom font
-        with dpg.font_registry():
-            default_font = dpg.add_font("fonts/Roboto_Mono/static/RobotoMono-Regular.ttf", 22, pixel_snapH=False)        
+        self.setup_main_window()
+        self.setup_sim_area()
+        self.setup_left_sidebar()
+
+        self.set_styles()
+        self.setup_key_handlers()
+        self.main_window.show()
+
+    def setup_main_window(self):
+        self.main_window.setWindowTitle("CyberOrganism")
+        central_widget = QWidget()
+        self.main_window.setCentralWidget(central_widget)
+        self.main_window.resize(self.WIDTH, self.HEIGHT)
+
+    def setup_sim_area(self):
+        self.sim_area = QWidget(self.main_window)
+        self.sim_area.setGeometry(0, 0, self.WIDTH, self.HEIGHT)
         
-        # Set default font
-        dpg.bind_font(default_font)
-       # dpg.set_global_font_scale(0.5)
+        # Set background color directly
+        self.sim_area.setStyleSheet("background-color: red;")
 
-        # Create the main viewport
-        dpg.create_viewport(title=self.TITLE, width=self.WIDTH, height=self.HEIGHT)
 
-        # Create the main window
-        with dpg.window(label="Main", tag="main_window", autosize=True):
-            with dpg.window(label="Simulation", no_title_bar=True, no_move=True, no_resize=True, no_scrollbar=False, no_scroll_with_mouse=False, tag="sim_window"):
-                dpg.add_drawlist(width=self.SIM_WIDTH, height=self.SIM_HEIGHT, tag="sim_area")
+    def setup_left_sidebar(self):
+        self.left_sidebar = QWidget(self.main_window)
+        self.left_sidebar.setGeometry(0, 0, 350, self.HEIGHT)
 
-            with dpg.window(label="Left Sidebar", width=self.SIDEBAR_WIDTH, height=self.SIM_HEIGHT, no_title_bar=True, no_move=True, no_resize=True, tag="left_sidebar"):                
-                with dpg.collapsing_header(label="Organism Statistics", default_open=True):
-                    dpg.add_text("", tag="organism_stats")
-                
-                with dpg.collapsing_header(label="Performance Statistics", default_open=True):
-                    dpg.add_text("", tag="performance_stats")
-                
-                with dpg.collapsing_header(label="Training Metrics", default_open=True):
-                    dpg.add_text("", tag="training_metrics")
+        sidebar_layout = QVBoxLayout(self.left_sidebar)
 
-        # Set the primary window
-        dpg.set_primary_window("main_window", True)
+        self.setup_stat_section("Organism Statistics", sidebar_layout, "organism_stats_label")
+        self.setup_stat_section("Performance Statistics", sidebar_layout, "performance_stats_label")
+        self.setup_stat_section("Training Metrics", sidebar_layout, "training_metrics_label")
 
-        # Set the sidebar background color
-        with dpg.theme() as sidebar_theme:
-            with dpg.theme_component(dpg.mvAll):
-                dpg.add_theme_color(dpg.mvThemeCol_ChildBg, (47, 79, 79))  # Slate gray
-                dpg.add_theme_color(dpg.mvThemeCol_Border, (125, 125, 125, 100))  # Light gray with reduced alpha
+        self.left_sidebar.raise_()
 
-        dpg.bind_item_theme("left_sidebar", sidebar_theme)
+    def setup_stat_section(self, title, parent_layout, label_attr_name):
+        stats_box = CollapsibleBox(title, self.left_sidebar)
+        parent_layout.addWidget(stats_box)
+        stats_layout = QVBoxLayout()
+        stats_label = QLabel("", self.left_sidebar)
+        stats_layout.addWidget(stats_label)
+        stats_box.setContentLayout(stats_layout)
+        stats_box.setExpanded(True)
+        setattr(self, label_attr_name, stats_label)
 
-        # Set the main window background color
-        with dpg.theme() as main_window_theme:
-            with dpg.theme_component(dpg.mvAll):
-                dpg.add_theme_color(dpg.mvThemeCol_WindowBg, (0, 0, 0, 255))
+    def set_styles(self):
+        # Set sim_area background color to red
+        self.sim_area.setStyleSheet("background-color: red;")
 
-        dpg.bind_item_theme("main_window", main_window_theme)
-        dpg.bind_item_theme("sim_window", main_window_theme)
+        # Set sidebar background color to slate gray
+        self.left_sidebar.setStyleSheet("background-color: #708090;")  # Hex code for slate gray
 
-        # Set the global font color and font
-        with dpg.theme() as global_theme:
-            with dpg.theme_component(dpg.mvAll):
-                dpg.add_theme_color(dpg.mvThemeCol_Text, (0, 255, 0))  # Neon green
-                dpg.add_theme_color(dpg.mvThemeCol_Border, (0, 0, 0, 0))  # Transparent border
+        # Set global font and text color
+        font = QFont("Roboto Mono", 22)
+        self.main_window.setFont(font)
 
-        dpg.bind_theme(global_theme)
+        palette = self.main_window.palette()
+        palette.setColor(QPalette.WindowText, QColor(0, 255, 0))  # Green text
+        self.main_window.setPalette(palette)
 
-        # Set up key handler
-        with dpg.handler_registry():
-            dpg.add_key_release_handler(key=dpg.mvKey_Escape, callback=self.exit_callback)
+    def setup_key_handlers(self):
+        self.main_window.keyPressEvent = self.handle_key_press
 
-        # Configure viewport
-        dpg.setup_dearpygui()
-        dpg.show_viewport()
-        dpg.toggle_viewport_fullscreen()
-
-    def exit_callback(self):
-        self.should_exit = True
+    def handle_key_press(self, event):
+        if event.key() == Qt.Key_Escape:
+            self.should_exit = True
+            self.main_window.close()
 
     def update_left_sidebar(self, organism_stats, performance_stats, training_metrics):
-        dpg.set_value("organism_stats", self.format_stats(organism_stats))
-        dpg.set_value("performance_stats", self.format_stats(performance_stats))
-        dpg.set_value("training_metrics", self.format_training_metrics(training_metrics))
+        self.organism_stats_label.setText(self.format_stats(organism_stats))
+        self.performance_stats_label.setText(self.format_stats(performance_stats))
+        self.training_metrics_label.setText(self.format_training_metrics(training_metrics))
 
     def format_stats(self, stats):
         return "\n".join(stats)
@@ -129,24 +113,57 @@ class UI:
         return "\n".join(formatted_metrics)
 
     def update(self, sim_state):
-        with dpg.mutex():
-            dpg.delete_item("sim_area", children_only=True)
-            draw_simulation("sim_area", sim_state)
-
-        dpg.render_dearpygui_frame()
-        
-    def should_quit(self):
-        return self.should_exit or not dpg.is_dearpygui_running()
-
-    def cleanup(self):
-        dpg.destroy_context()
+        #draw_simulation(self.sim_area, sim_state)  # Assuming this is your drawing function
+        self.app.processEvents()
 
     def get_display_framerate(self):
-        return dpg.get_frame_rate()
-    
+        # You'll need to implement this if you want to get the framerate
+        return 999
+
     def get_mouse_position(self):
-        return dpg.get_mouse_pos(local=False)  # local position is not correct for some reason, use global and compare to viewport dimensions
-    
-    def get_viewport_dimensions(self):
-        return dpg.get_viewport_width(), dpg.get_viewport_height()
-    
+        global_pos = QCursor.pos()
+        local_pos = self.sim_area.mapFromGlobal(global_pos)
+        return local_pos.x(), local_pos.y()
+
+    def get_viewport_dimensions(self):  # rename to get_sim_area_dimensions
+        return self.sim_area.width(), self.sim_area.height()
+
+    def run(self):
+        self.main_window.show()
+        return self.app.exec()
+
+class CollapsibleBox(QWidget):
+    def __init__(self, title="", parent=None):
+        super(CollapsibleBox, self).__init__(parent)
+
+        self.toggle_button = QPushButton(title)
+        self.toggle_button.setStyleSheet("text-align: left; padding: 5px;")
+        self.toggle_button.setCheckable(True)
+        self.toggle_button.setChecked(False)
+
+        self.toggle_button.clicked.connect(self.on_toggle)
+
+        self.content_area = QWidget()
+        self.content_area.setVisible(False)
+
+        lay = QVBoxLayout(self)
+        lay.setSpacing(0)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.toggle_button)
+        lay.addWidget(self.content_area)
+
+        self.main_layout = QVBoxLayout(self.content_area)
+
+    def on_toggle(self, checked):
+        self.content_area.setVisible(checked)
+
+    def setContentLayout(self, layout):
+        lay = self.main_layout
+        del lay
+        self.main_layout = layout
+        self.content_area.setLayout(self.main_layout)
+
+    def setExpanded(self, expanded):
+        self.toggle_button.setChecked(expanded)
+        self.content_area.setVisible(expanded)
+

@@ -50,7 +50,7 @@ class SimulationEngine:
         self.initialize_food_spawners()
 
     def update_viewport_dimensions(self):
-        sim_area_width, sim_area_height = self.ui.SIM_WIDTH, self.ui.SIM_HEIGHT  # we're using sim dimensions instead of viewport dimensions because we're drawing to the sim area, which has to be clipped for some reason
+        sim_area_width, sim_area_height = self.ui.WIDTH, self.ui.HEIGHT
         self.viewport_cell_width = sim_area_width // self.CELL_SIZE
         self.viewport_cell_height = sim_area_height // self.CELL_SIZE
 
