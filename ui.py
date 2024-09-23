@@ -1,24 +1,25 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
-from PySide6.QtGui import QFont, QColor, QPalette, QCursor
+from PySide6.QtGui import QFont, QColor, QPalette, QCursor, QGuiApplication, QScreen
 from PySide6.QtCore import Qt, QSize
-from drawing import draw_simulation  # Assuming this is your drawing function
+from drawing import SimAreaWidget
 from screeninfo import get_monitors
 
 class UI:
     def __init__(self):
         self.app = QApplication(sys.argv)
         
-        # Set global font
         font = QFont("Roboto Mono", 12)
         self.app.setFont(font)
         
         self.main_window = QMainWindow()
         self.should_exit = False
 
-        # Get monitor information
-        self.monitor = get_monitors()[0]
-        self.WIDTH, self.HEIGHT = self.monitor.width, self.monitor.height
+        # Get the primary screen
+        screen = QGuiApplication.primaryScreen()
+        
+        # Get the screen size
+        self.WIDTH, self.HEIGHT = screen.size().width(), screen.size().height()
 
         # Set up UI elements
         self.setup_ui()
@@ -61,18 +62,15 @@ class UI:
         self.main_window.resize(self.WIDTH, self.HEIGHT)
 
     def setup_sim_area(self):
-        self.sim_area = QWidget(self.main_window)
+        self.sim_area = SimAreaWidget(self.main_window)
         self.sim_area.setGeometry(0, 0, self.WIDTH, self.HEIGHT)
-        
-        # Set background color directly
-        self.sim_area.setStyleSheet("background-color: red;")
 
 
     def setup_left_sidebar(self):
         # Create the actual sidebar widget
         self.left_sidebar = QWidget(self.main_window)
         self.left_sidebar.setObjectName("leftSidebar")
-        self.left_sidebar.setGeometry(0, 0, 350, self.HEIGHT)  # Adjust for border
+        self.left_sidebar.setGeometry(0, 0, 300, self.HEIGHT)  # Adjust for border
 
         # Create a layout for the sidebar and remove its margins
         sidebar_layout = QVBoxLayout()
@@ -83,6 +81,7 @@ class UI:
         self.setup_stat_section("Organism Statistics", sidebar_layout, "organism_stats_label")
         self.setup_stat_section("Performance Statistics", sidebar_layout, "performance_stats_label")
         self.setup_stat_section("Training Metrics", sidebar_layout, "training_metrics_label")
+        self.setup_stat_section("Debug Info", sidebar_layout, "debug_info_label")  # Add this line
 
         sidebar_layout.addStretch(1)  # This pushes everything to the top
 
@@ -150,25 +149,40 @@ class UI:
                 ])
         return "\n".join(formatted_metrics)
 
+    def update_debug_info(self):
+        sim_area_width, sim_area_height = self.sim_area.width(), self.sim_area.height()
+        mouse_x, mouse_y = self.sim_area.get_mouse_position()
+        
+        # Get the primary screen
+        screen = QGuiApplication.primaryScreen()
+        
+        # Get the device pixel ratio
+        device_pixel_ratio = screen.devicePixelRatio()
+        
+        # Get the true screen size
+        screen_size = screen.size()
+        
+        # Get the main window geometry
+        window_geometry = self.main_window.geometry()
+        
+        debug_info = f"Sim Area: {sim_area_width}x{sim_area_height}\n"
+        debug_info += f"Mouse Position: ({mouse_x}, {mouse_y})\n"
+        debug_info += f"Device Pixel Ratio: {device_pixel_ratio}\n"
+        debug_info += f"Screen Size: {screen_size.width()}x{screen_size.height()}\n"
+        debug_info += f"Window Geometry: {window_geometry.width()}x{window_geometry.height()} at ({window_geometry.x()}, {window_geometry.y()})\n"
+        debug_info += f"Logical DPI: {screen.logicalDotsPerInch()}\n"
+        debug_info += f"Physical DPI: {screen.physicalDotsPerInch()}"
+        
+        self.debug_info_label.setText(debug_info)
+
     def update(self, sim_state):
-        #draw_simulation(self.sim_area, sim_state)  # Assuming this is your drawing function
+        self.sim_area.draw_simulation(sim_state)
+        self.update_debug_info()
         self.app.processEvents()
 
     def get_display_framerate(self):
         # You'll need to implement this if you want to get the framerate
         return 999
-
-    def get_mouse_position(self):
-        global_pos = QCursor.pos()
-        local_pos = self.sim_area.mapFromGlobal(global_pos)
-        return local_pos.x(), local_pos.y()
-
-    def get_viewport_dimensions(self):  # rename to get_sim_area_dimensions
-        return self.sim_area.width(), self.sim_area.height()
-
-    def run(self):
-        self.main_window.show()
-        return self.app.exec()
 
 class CollapsibleBox(QWidget):
     def __init__(self, title="", parent=None):
@@ -211,6 +225,8 @@ class CollapsibleBox(QWidget):
 
     def on_toggle(self, checked):
         self.content_area.setVisible(checked)
+        self.adjustSize()  # Adjust the size of the CollapsibleBox
+        self.updateGeometry()  # Notify the layout system to recalculate sizes
 
     def setContentLayout(self, layout):
         # Remove all items from the main_layout

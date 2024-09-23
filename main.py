@@ -24,13 +24,10 @@ def run_simulation(sim_state):
     last_print_time = time.time()
     update_times, draw_times, total_frame_times = [], [], []
     frame_count = 0
-    frame_time = 1.0 / sim_state.sim_engine.FPS
+    frame_time = 1.0 / sim_state.ui.sim_area.FPS
     
     while running:
         frame_start = time.time()
-        
-        if sim_state.total_time >= 0.5:
-            sim_state.sim_engine.handle_camera_panning()
         
         update_start_time = time.time()
         if frame_count % 2 == 0:  # Simulation runs at 30 FPS

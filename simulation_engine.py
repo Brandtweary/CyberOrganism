@@ -12,65 +12,29 @@ from uuid import UUID
 class SimulationEngine:
     def __init__(self, ui):
         self.ui = ui
+        self.sim_area_widget = self.ui.sim_area
+        self.sim_area_widget.sim_engine = self
         self.GRID_SIZE = 7200
         self.CELL_SIZE = 10
-        self.FPS = 60
-        self.UPDATE_INTERVAL = 1.0 / 30
-        self.CAMERA_PAN_SPEED = 200
+        self.UPDATE_INTERVAL = 1.0 / (self.sim_area_widget.FPS / 2)
         self.MAX_FOOD_ITEMS = 12
-        self.CAMERA_PAN_THRESHOLD = 5
         self.collision_range = 2 
-
-        # Colors
-        self.BLACK = (0, 0, 0)
-        self.NEON_GREEN = (57, 255, 20)
-        self.RED = (255, 0, 0)
-        self.BLUE = (0, 0, 255)
-        self.YELLOW = (255, 255, 0)
-        self.PURPLE = (128, 0, 128)
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE
-        
         self.viewport_cell_width = 0
         self.viewport_cell_height = 0
         self.viewport_cell_center_x = self.world_width // 2
         self.viewport_cell_center_y = self.world_height // 2
         
-        self.last_viewport_update_time = time.time()
-        self.last_pan_time = time.time()
-        
         self.state_history = deque(maxlen=100)
         self.current_state = StateSnapshot(self, current_time=time.time(), grid_size=self.GRID_SIZE)
-
         self.items = []
         self.organisms = []
         self.test_organism = None
-        self.update_viewport_dimensions()
+
+        self.sim_area_widget.update_viewport_dimensions()
         self.initialize_food_spawners()
-
-    def update_viewport_dimensions(self):
-        sim_area_width, sim_area_height = self.ui.WIDTH, self.ui.HEIGHT
-        self.viewport_cell_width = sim_area_width // self.CELL_SIZE
-        self.viewport_cell_height = sim_area_height // self.CELL_SIZE
-
-    def handle_camera_panning(self):
-        mouse_x, mouse_y = self.ui.get_mouse_position()
-        viewport_width, viewport_height = self.ui.get_viewport_dimensions()  # we do need to use the viewport dimensions here
-        dx = dy = 0
-
-        if mouse_x <= self.CAMERA_PAN_THRESHOLD:
-            dx = -self.CAMERA_PAN_SPEED / self.FPS
-        elif mouse_x >= viewport_width - self.CAMERA_PAN_THRESHOLD:
-            dx = self.CAMERA_PAN_SPEED / self.FPS
-
-        if mouse_y <= self.CAMERA_PAN_THRESHOLD:
-            dy = -self.CAMERA_PAN_SPEED / self.FPS
-        elif mouse_y >= viewport_height - self.CAMERA_PAN_THRESHOLD:
-            dy = self.CAMERA_PAN_SPEED / self.FPS
-
-        if dx != 0 or dy != 0:
-            self.update_viewport(int(dx), int(dy))
 
     def initialize_food_spawners(self):
         # Center of the viewport in grid coordinates
@@ -157,18 +121,6 @@ class SimulationEngine:
         # If no empty cell found, return None or raise an exception
         raise ValueError("No empty cell found in the entire grid")
 
-    def update_viewport(self, dx: int = 0, dy: int = 0) -> None:
-        self.update_viewport_dimensions()
-        
-        self.viewport_cell_center_x = max(self.viewport_cell_width // 2, 
-                                          min(self.viewport_cell_center_x + dx, 
-                                              self.world_width - self.viewport_cell_width // 2))
-        self.viewport_cell_center_y = max(self.viewport_cell_height // 2, 
-                                          min(self.viewport_cell_center_y + dy, 
-                                              self.world_height - self.viewport_cell_height // 2))
-        
-        self.last_viewport_update_time = time.time()
-
     def update_simulation(self) -> None:
         new_state: StateSnapshot = self.current_state.clone_state_snapshot()
         new_state.update_time(time.time())
@@ -244,17 +196,6 @@ class SimulationEngine:
             elif obj in self.organisms:
                 self.organisms.remove(obj)
         state_snapshot.remove_state(obj_id)
-
-    def grid_to_screen(self, grid_x: int, grid_y: int) -> Tuple[int, int]:
-        # Convert grid coordinates to viewport cell coordinates
-        viewport_cell_x = grid_x - (self.viewport_cell_center_x - self.viewport_cell_width // 2)
-        viewport_cell_y = grid_y - (self.viewport_cell_center_y - self.viewport_cell_height // 2)
-        
-        # Convert viewport cell coordinates to screen coordinates
-        screen_x = viewport_cell_x * self.CELL_SIZE
-        screen_y = viewport_cell_y * self.CELL_SIZE
-        
-        return int(screen_x), int(screen_y)
 
     def calculate_distance(self, x1: int, y1: int, x2: int, y2: int, normalize_to_viewport: bool = False) -> float:
         distance = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
