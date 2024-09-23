@@ -4,11 +4,11 @@ from PySide6.QtCore import QRectF, Qt
 from state_snapshot import ObjectType
 
 class SimAreaWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, FPS, parent=None):
         super().__init__(parent)
         self.sim_state = None
         self.sim_engine = None
-        self.FPS = 60  # Frames per second
+        self.FPS = FPS  # Frames per second
         self.camera_pan_threshold = 5  # Pixels
         self.camera_pan_speed = 200  # Pixels per frame
 

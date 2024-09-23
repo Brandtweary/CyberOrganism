@@ -20,6 +20,7 @@ class UI:
         
         # Get the screen size
         self.WIDTH, self.HEIGHT = screen.size().width(), screen.size().height()
+        self.FPS = 30
 
         # Set up UI elements
         self.setup_ui()
@@ -62,7 +63,7 @@ class UI:
         self.main_window.resize(self.WIDTH, self.HEIGHT)
 
     def setup_sim_area(self):
-        self.sim_area = SimAreaWidget(self.main_window)
+        self.sim_area = SimAreaWidget(self.FPS, self.main_window)
         self.sim_area.setGeometry(0, 0, self.WIDTH, self.HEIGHT)
 
 
@@ -81,14 +82,14 @@ class UI:
         self.setup_stat_section("Organism Statistics", sidebar_layout, "organism_stats_label")
         self.setup_stat_section("Performance Statistics", sidebar_layout, "performance_stats_label")
         self.setup_stat_section("Training Metrics", sidebar_layout, "training_metrics_label")
-        self.setup_stat_section("Debug Info", sidebar_layout, "debug_info_label")  # Add this line
+        self.setup_stat_section("Debug Info", sidebar_layout, "debug_info_label", expanded=False)  # Add this line
 
         sidebar_layout.addStretch(1)  # This pushes everything to the top
 
         # Ensure the sidebar is on top of the frame
         self.left_sidebar.raise_()
 
-    def setup_stat_section(self, title, parent_layout, label_attr_name):
+    def setup_stat_section(self, title, parent_layout, label_attr_name, expanded=True):
         stats_box = CollapsibleBox(title, self.left_sidebar)
         parent_layout.addWidget(stats_box)
         
@@ -98,7 +99,7 @@ class UI:
         stats_layout.addWidget(stats_label)
         
         stats_box.setContentLayout(stats_layout)
-        stats_box.setExpanded(True)
+        stats_box.setExpanded(expanded)
         setattr(self, label_attr_name, stats_label)
 
     def setup_key_handlers(self):

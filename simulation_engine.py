@@ -16,7 +16,7 @@ class SimulationEngine:
         self.sim_area_widget.sim_engine = self
         self.GRID_SIZE = 7200
         self.CELL_SIZE = 10
-        self.UPDATE_INTERVAL = 1.0 / (self.sim_area_widget.FPS / 2)
+        self.UPDATE_INTERVAL = 1.0 / ui.FPS
         self.MAX_FOOD_ITEMS = 12
         self.collision_range = 2 
 
