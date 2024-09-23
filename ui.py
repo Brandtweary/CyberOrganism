@@ -34,7 +34,7 @@ class UI:
 
         self.set_styles()
         self.setup_key_handlers()
-        self.main_window.show()
+        self.main_window.showFullScreen()
 
     def set_styles(self):
         # Set sim_area background color to black
