@@ -4,6 +4,12 @@ from simulation_engine import SimulationEngine
 import time
 from simulation_state import SimulationState
 from PySide6.QtCore import QTimer, QEventLoop, QCoreApplication, QThread, Signal, Slot
+import cProfile
+import pstats
+import io
+import os
+from collections import deque
+from shared_resources import debug
 
 
 def main():
@@ -28,11 +34,29 @@ def run_simulation(sim_state):
     frame_times = []
     frame_count = 0
     last_fps_calc_time = time.time()
+    start_time = time.time()
+
+    # Create a Profile object
+    pr = cProfile.Profile()
+    is_profiling = False
+
+    # Create a deque to store the last two frames' profiling data
+    last_frames = deque(maxlen=2)
 
     @Slot()
     def simulation_step():
-        nonlocal last_print_time, frame_count, last_fps_calc_time
-        nonlocal frame_times
+        nonlocal last_print_time, frame_count, last_fps_calc_time, start_time
+        nonlocal frame_times, pr, is_profiling, last_frames
+
+        current_time = time.time()
+
+        # Start profiling after 1 second
+        if debug and not is_profiling and current_time - start_time >= 1.0:
+            is_profiling = True
+            print("Warm-up complete. Starting profiling...")
+
+        if is_profiling:
+            pr.enable()
 
         frame_start = time.time()
         
@@ -42,8 +66,23 @@ def run_simulation(sim_state):
         frame_time = time.time() - frame_start
         frame_times.append(frame_time)
 
+        if is_profiling:
+            pr.disable()
+            
+            # Store the profiling data for this frame
+            s = io.StringIO()
+            ps = pstats.Stats(pr, stream=s).sort_stats('cumulative')
+            last_frames.append((frame_time, s.getvalue(), ps.stats))
+
+            # Print summary and profile info if frame time exceeds threshold
+            if frame_time > 0.030:  # 30ms threshold
+                print(f"\nSlow frame detected: {frame_time*1000:.2f}ms")
+                print("Comparison with previous frame:")
+                print_frame_comparison(last_frames)
+
+            pr.clear()
+
         frame_count += 1
-        current_time = time.time()
 
         # Calculate FPS every second
         if current_time - last_fps_calc_time >= 1.0:
@@ -51,7 +90,7 @@ def run_simulation(sim_state):
             frame_count = 0
             last_fps_calc_time = current_time
 
-        # Print summary every 10 seconds
+        # Regular summary every 10 seconds
         if current_time - last_print_time >= 10:
             print_simulation_summary(sim_state, frame_times)
             last_print_time = current_time
@@ -66,6 +105,46 @@ def run_simulation(sim_state):
 
     event_loop.exec()
     timer_thread.wait()  # Wait for the thread to finish
+
+def print_frame_comparison(frames):
+    if len(frames) < 2:
+        print("Not enough data for comparison")
+        return
+
+    prev_frame, slow_frame = frames
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    print(f"{'Function':<50} {'Prev Calls':>10} {'Prev Time':>10} {'Prev %':>8} {'Slow Calls':>10} {'Slow Time':>10} {'Slow %':>8} {'Diff':>10}")
+    print("=" * 120)
+
+    all_funcs = set(prev_frame[2].keys()) | set(slow_frame[2].keys())
+    func_data = []
+
+    for func in all_funcs:
+        if base_dir in func[0]:  # Only include functions from your project
+            file_name = os.path.basename(func[0])
+            func_name = f"{file_name}:{func[2]}"
+            
+            prev_stats = prev_frame[2].get(func, (0, 0, 0, 0, None))
+            slow_stats = slow_frame[2].get(func, (0, 0, 0, 0, None))
+            
+            prev_calls, prev_time = prev_stats[1], prev_stats[3] * 1000  # Convert to ms
+            slow_calls, slow_time = slow_stats[1], slow_stats[3] * 1000  # Convert to ms
+            prev_percent = (prev_time / (prev_frame[0] * 1000)) * 100 if prev_frame[0] > 0 else 0
+            slow_percent = (slow_time / (slow_frame[0] * 1000)) * 100 if slow_frame[0] > 0 else 0
+            time_diff = slow_time - prev_time
+
+            func_data.append((func_name, prev_calls, prev_time, prev_percent, slow_calls, slow_time, slow_percent, time_diff))
+
+    # Sort by slow frame percentage (descending)
+    func_data.sort(key=lambda x: x[6], reverse=True)
+
+    for data in func_data:
+        print(f"{data[0]:<50} {data[1]:>10} {data[2]:>10.2f} {data[3]:>7.2f}% {data[4]:>10} {data[5]:>10.2f} {data[6]:>7.2f}% {data[7]:>10.2f}")
+
+    print("=" * 120)
+    print(f"Total frame time (ms): {prev_frame[0]*1000:>10.2f} {100:>7.2f}% {slow_frame[0]*1000:>10.2f} {100:>7.2f}% {(slow_frame[0] - prev_frame[0])*1000:>10.2f}")
+    breakpoint()
 
 class TimerThread(QThread):
     timeout = Signal()

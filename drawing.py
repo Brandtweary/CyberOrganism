@@ -90,7 +90,7 @@ class SimAreaWidget(QWidget):
         painter = QPainter(self)
         self.draw_background(painter)
         self.draw_items(painter)
-        #self.draw_attention_points(painter)
+        self.draw_attention_points(painter)
         self.draw_organisms(painter)
 
     def draw_background(self, painter):
