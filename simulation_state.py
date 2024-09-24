@@ -26,8 +26,6 @@ class SimulationState:
         self.training_record_stats = self.test_organism.RL_algorithm.training_stats.record_stats
 
         # Add new attributes for storing average times
-        self.avg_update_times = []
-        self.avg_draw_times = []
         self.avg_total_frame_times = []
 
         self.ui_update_timer = 0
