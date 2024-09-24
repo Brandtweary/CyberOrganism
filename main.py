@@ -3,6 +3,7 @@ from organism import Organism
 from simulation_engine import SimulationEngine
 import time
 from simulation_state import SimulationState
+from PySide6.QtCore import QTimer, QEventLoop, QCoreApplication, QThread, Signal, Slot
 
 
 def main():
@@ -20,15 +21,33 @@ def main():
     print_final_summary(sim_state)
 
 def run_simulation(sim_state):
-    running = True
+    event_loop = QEventLoop()
+    timer_thread = TimerThread(1 / sim_state.ui.FPS)
+    
     last_print_time = time.time()
-    update_times, draw_times, total_frame_times = [], [], []
+    update_times, draw_times, total_frame_times, timing_deviations, event_backlogs = [], [], [], [], []
     frame_count = 0
     last_fps_calc_time = time.time()
-    frame_time = 1.0 / sim_state.ui.FPS
-    
-    while running:
+    last_timer_call = time.time()
+
+    @Slot()
+    def simulation_step():
+        nonlocal last_print_time, frame_count, last_fps_calc_time, last_timer_call
+        nonlocal update_times, draw_times, total_frame_times, timing_deviations, event_backlogs
+
+        current_time = time.time()
+        actual_interval = current_time - last_timer_call
+        expected_interval = 1 / sim_state.ui.FPS
+        timing_deviations.append((actual_interval - expected_interval) * 1000)  # Convert to milliseconds
+        last_timer_call = current_time
+
         frame_start = time.time()
+
+        # Process pending events and measure the time
+        start_process = time.time()
+        QCoreApplication.processEvents()
+        event_processing_time = time.time() - start_process
+        event_backlogs.append(event_processing_time * 1000)  # Convert to milliseconds
         
         update_start_time = time.time()
         sim_state.update()
@@ -52,29 +71,52 @@ def run_simulation(sim_state):
             frame_count = 0
             last_fps_calc_time = current_time
 
+        # Print summary every 10 seconds
         if current_time - last_print_time >= 10:
-            print_simulation_summary(sim_state, update_times, draw_times, total_frame_times)
+            print_simulation_summary(sim_state, update_times, draw_times, total_frame_times, timing_deviations, event_backlogs)
             last_print_time = current_time
-            update_times, draw_times, total_frame_times = [], [], []
+            update_times, draw_times, total_frame_times, timing_deviations, event_backlogs = [], [], [], [], []
         
-        # Control frame rate
-        frame_end = time.time()
-        frame_duration = frame_end - frame_start
-        if frame_duration < frame_time:
-            time.sleep(frame_time - frame_duration)
-        
-        running = not sim_state.ui.should_exit
+        if sim_state.ui.should_exit:
+            timer_thread.stop()
+            event_loop.quit()
 
-def print_simulation_summary(sim_state, update_times, draw_times, total_frame_times):
+    timer_thread.timeout.connect(simulation_step)
+    timer_thread.start()
+
+    event_loop.exec()
+    timer_thread.wait()  # Wait for the thread to finish
+
+class TimerThread(QThread):
+    timeout = Signal()
+
+    def __init__(self, interval_seconds):
+        super().__init__()
+        self.interval = interval_seconds
+        self.running = True
+
+    def run(self):
+        while self.running:
+            time.sleep(self.interval)
+            self.timeout.emit()
+
+    def stop(self):
+        self.running = False
+
+def print_simulation_summary(sim_state, update_times, draw_times, total_frame_times, timing_deviations, event_backlogs):
     print_simulation_stats(sim_state)
     
     avg_update_time = sum(update_times) / max(len(update_times), 1)
     avg_draw_time = sum(draw_times) / max(len(draw_times), 1)
     avg_total_frame_time = sum(total_frame_times) / max(len(total_frame_times), 1)
+    avg_timing_deviation = sum(timing_deviations) / max(len(timing_deviations), 1)
+    avg_event_backlog = sum(event_backlogs) / max(len(event_backlogs), 1)
     
     max_update_time = max(update_times) if update_times else 0
     max_draw_time = max(draw_times) if draw_times else 0
     max_total_frame_time = max(total_frame_times) if total_frame_times else 0
+    max_timing_deviation = max(timing_deviations) if timing_deviations else 0
+    max_event_backlog = max(event_backlogs) if event_backlogs else 0
     
     sim_state.avg_update_times.append(avg_update_time)
     sim_state.avg_draw_times.append(avg_draw_time)
@@ -83,6 +125,8 @@ def print_simulation_summary(sim_state, update_times, draw_times, total_frame_ti
     print(f"Avg Update time: {avg_update_time*1000:.2f}ms (Max: {max_update_time*1000:.2f}ms)")
     print(f"Avg Draw time: {avg_draw_time*1000:.2f}ms (Max: {max_draw_time*1000:.2f}ms)")
     print(f"Avg Total frame time: {avg_total_frame_time*1000:.2f}ms (Max: {max_total_frame_time*1000:.2f}ms)")
+    print(f"Avg Event backlog: {avg_event_backlog:.2f}ms (Max: {max_event_backlog:.2f}ms)")
+    print(f"Avg Timing deviation: {avg_timing_deviation:.2f}ms (Max: {max_timing_deviation:.2f}ms)")
     current_overall_avg = sum(sim_state.avg_update_times) / len(sim_state.avg_update_times)
     print(f"Current overall avg update time: {current_overall_avg*1000:.2f}ms")
     print("--------------------")

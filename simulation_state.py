@@ -30,6 +30,10 @@ class SimulationState:
         self.avg_draw_times = []
         self.avg_total_frame_times = []
 
+        self.ui_update_timer = 0
+        self.last_updated_section = -1
+        self.ui_update_interval = 0.1
+
     def generate_organism_stats(self):
         stats = []
         for param, value in self.display_parameters.items():
@@ -84,10 +88,27 @@ class SimulationState:
         self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
         self.training_record_stats = self.test_organism.RL_algorithm.training_stats.record_stats
 
-        # Update UI stats
-        organism_stats = self.generate_organism_stats()
-        performance_stats = self.generate_performance_stats()
-        self.ui.update_left_sidebar(organism_stats, performance_stats, self.training_metrics)
+        # Staggered UI update
+        if self.last_updated_section == -1:
+            # First update: update all sections
+            organism_stats = self.generate_organism_stats()
+            performance_stats = self.generate_performance_stats()
+            self.ui.update_left_sidebar(organism_stats, performance_stats, self.training_metrics)
+            self.last_updated_section = 2  # Set to 2 so next update starts with 0
+        else:
+            self.ui_update_timer += self.sim_engine.UPDATE_INTERVAL
+            if self.ui_update_timer >= self.ui_update_interval:
+                self.ui_update_timer = 0
+                self.last_updated_section = (self.last_updated_section + 1) % 3
+
+                if self.last_updated_section == 0:
+                    organism_stats = self.generate_organism_stats()
+                    self.ui.update_left_sidebar(organism_stats, None, None)
+                elif self.last_updated_section == 1:
+                    performance_stats = self.generate_performance_stats()
+                    self.ui.update_left_sidebar(None, performance_stats, None)
+                else:
+                    self.ui.update_left_sidebar(None, None, self.training_metrics)
 
     @staticmethod
     def format_parameter_name(name):

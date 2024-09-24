@@ -3,7 +3,8 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QVBoxL
 from PySide6.QtGui import QFont, QColor, QPalette, QCursor, QGuiApplication, QScreen
 from PySide6.QtCore import Qt, QSize
 from drawing import SimAreaWidget
-from screeninfo import get_monitors
+import time
+from shared_resources import debug
 
 class UI:
     def __init__(self):
@@ -82,7 +83,8 @@ class UI:
         self.setup_stat_section("Organism Statistics", sidebar_layout, "organism_stats_label")
         self.setup_stat_section("Performance Statistics", sidebar_layout, "performance_stats_label")
         self.setup_stat_section("Training Metrics", sidebar_layout, "training_metrics_label")
-        self.setup_stat_section("Debug Info", sidebar_layout, "debug_info_label", expanded=False)  # Add this line
+        if debug:
+            self.setup_stat_section("Debug Info", sidebar_layout, "debug_info_label", expanded=False)  # Add this line
 
         sidebar_layout.addStretch(1)  # This pushes everything to the top
 
@@ -125,9 +127,12 @@ class UI:
         event.accept()
 
     def update_left_sidebar(self, organism_stats, performance_stats, training_metrics):
-        self.organism_stats_label.setText(self.format_stats(organism_stats))
-        self.performance_stats_label.setText(self.format_stats(performance_stats))
-        self.training_metrics_label.setText(self.format_training_metrics(training_metrics))
+        if organism_stats is not None:
+            self.organism_stats_label.setText(self.format_stats(organism_stats))
+        if performance_stats is not None:
+            self.performance_stats_label.setText(self.format_stats(performance_stats))
+        if training_metrics is not None:
+            self.training_metrics_label.setText(self.format_training_metrics(training_metrics))
 
     def format_stats(self, stats):
         return "\n".join(stats)
@@ -151,6 +156,9 @@ class UI:
         return "\n".join(formatted_metrics)
 
     def update_debug_info(self):
+        if not debug:
+            return
+        
         sim_area_width, sim_area_height = self.sim_area.width(), self.sim_area.height()
         mouse_x, mouse_y = self.sim_area.get_mouse_position()
         
@@ -179,11 +187,6 @@ class UI:
     def update(self, sim_state):
         self.sim_area.draw_simulation(sim_state)
         self.update_debug_info()
-        self.app.processEvents()
-
-    def get_display_framerate(self):
-        # You'll need to implement this if you want to get the framerate
-        return 999
 
 class CollapsibleBox(QWidget):
     def __init__(self, title="", parent=None):
@@ -242,4 +245,3 @@ class CollapsibleBox(QWidget):
     def setExpanded(self, expanded):
         self.toggle_button.setChecked(expanded)
         self.content_area.setVisible(expanded)
-

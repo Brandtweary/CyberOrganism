@@ -2,6 +2,8 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QPainter, QColor, QCursor
 from PySide6.QtCore import QRectF, Qt
 from state_snapshot import ObjectType
+import time
+from shared_resources import debug
 
 class SimAreaWidget(QWidget):
     def __init__(self, FPS, parent=None):
@@ -10,7 +12,7 @@ class SimAreaWidget(QWidget):
         self.sim_engine = None
         self.FPS = FPS  # Frames per second
         self.camera_pan_threshold = 5  # Pixels
-        self.camera_pan_speed = 200  # Pixels per frame
+        self.camera_pan_speed = 150  # Pixels per frame
 
          # Color constants
         self.BLACK = (0, 0, 0)
@@ -84,6 +86,7 @@ class SimAreaWidget(QWidget):
     def paintEvent(self, event):
         if self.sim_state is None:
             return
+        
         painter = QPainter(self)
         self.draw_background(painter)
         self.draw_items(painter)
