@@ -118,7 +118,7 @@ class DQN(ReinforcementLearningAlgorithm):
         with self.network_lock:
             self.main_network_buffer[self.current_buffer].load_state_dict(learning_network.state_dict())
             self.current_buffer = 1 - self.current_buffer
-            self.training_steps += 1
+            self.training_steps += 1  # remember to sync this differently if you use concurrent learn threads
             if self.training_steps % target_update == 0:
                 self.target_network_buffer[self.target_buffer].load_state_dict(learning_network.state_dict())
                 self.target_buffer = 1 - self.target_buffer
