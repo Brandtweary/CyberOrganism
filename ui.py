@@ -35,13 +35,20 @@ class UI:
         self.setup_main_window()
         self.setup_sim_area()
         self.setup_left_sidebar()
+        self.setup_loading_screen()
 
         self.set_styles()
         self.setup_key_handlers()
         self.main_window.showFullScreen()
         
-        # Initially hide all UI elements except the main window
+        # Initially hide all UI elements except the main window and loading screen
         self.hide_ui_elements()
+
+    def setup_loading_screen(self):
+        self.loading_screen = QWidget(self.main_window)
+        self.loading_screen.resize(self.main_window.size())
+        self.loading_screen.raise_()  # Ensure it's on top
+        self.loading_screen.show()  # Initially shown
 
     def set_styles(self):
         # Set main window background color to black
@@ -64,13 +71,18 @@ class UI:
             }
         """)
 
+        # Set loading screen background color to black
+        self.loading_screen.setStyleSheet("background-color: black;")
+
     def hide_ui_elements(self):
         self.left_sidebar.hide()
         self.sim_area.hide()
+        self.loading_screen.show()
 
     def show_ui_elements(self):
         self.left_sidebar.show()
         self.sim_area.show()
+        self.loading_screen.hide()
 
     def setup_main_window(self):
         self.main_window.setWindowTitle("CyberOrganism")
@@ -203,7 +215,6 @@ class UI:
         if sim_state.frame_count <= sim_state.loading_frames:
             # Keep UI elements hidden during loading
             self.hide_ui_elements()
-            self.draw_loading_screen()
         elif not self.loaded:
             # Show UI elements after loading is complete
             self.show_ui_elements()
@@ -211,13 +222,6 @@ class UI:
 
         self.sim_area.draw_simulation(sim_state)
         self.update_debug_info()
-
-    def draw_loading_screen(self):
-        # Draw a black rectangle covering the entire screen
-        painter = QPainter(self.main_window)
-        painter.fillRect(self.main_window.rect(), Qt.black)
-        painter.end()
-        self.main_window.update()
 
 class CollapsibleBox(QWidget):
     def __init__(self, title="", parent=None):
@@ -256,10 +260,12 @@ class CollapsibleBox(QWidget):
         self.main_layout = QVBoxLayout()
         self.content_area.setLayout(self.main_layout)
 
+        self.toggle_button.toggled.connect(self.on_toggle)  # Connect the signal
+
     def on_toggle(self, checked):
         self.content_area.setVisible(checked)
-        self.adjustSize()  # Adjust the size of the CollapsibleBox
-        self.updateGeometry()  # Notify the layout system to recalculate sizes
+        self.adjustSize()
+        self.updateGeometry()
 
     def setContentLayout(self, layout):
         # Remove all items from the main_layout

@@ -47,6 +47,7 @@ def run_simulation(sim_state):
     # Create a deque to store the last two frames' profiling data
     last_frames = deque(maxlen=2)
 
+    @Slot()
     def simulation_step():
         nonlocal last_print_time, frame_count, last_fps_calc_time, start_time
         nonlocal frame_times, pr, is_profiling, sim_state, last_frames
