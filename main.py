@@ -10,7 +10,11 @@ import io
 import os
 from collections import deque
 from shared_resources import debug
+import logging
+import traceback
 
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def main():
     ui = UI()
@@ -43,68 +47,89 @@ def run_simulation(sim_state):
     # Create a deque to store the last two frames' profiling data
     last_frames = deque(maxlen=2)
 
-    @Slot()
     def simulation_step():
         nonlocal last_print_time, frame_count, last_fps_calc_time, start_time
-        nonlocal frame_times, pr, is_profiling, last_frames, sim_state
+        nonlocal frame_times, pr, is_profiling, sim_state, last_frames
 
-        current_time = time.time()
+        try:
+            if debug and not is_profiling and sim_state.frame_count > sim_state.loading_frames + 2:
+                is_profiling = True
+                logger.info("Warm-up complete. Starting profiling...")
 
-        # Start profiling after 1 second
-        if debug and not is_profiling and sim_state.frame_count > sim_state.loading_frames + 2:
-            is_profiling = True
-            print("Warm-up complete. Starting profiling...")
-
-        if is_profiling:
-            pr.enable()
-
-        frame_start = time.time()
-        
-        sim_state.update()
-        sim_state.ui.update(sim_state)
-
-        frame_time = time.time() - frame_start
-        frame_times.append(frame_time)
-
-        if is_profiling:
-            pr.disable()
+            frame_start = time.time()
             
-            # Store the profiling data for this frame
-            s = io.StringIO()
-            ps = pstats.Stats(pr, stream=s).sort_stats('cumulative')
-            last_frames.append((frame_time, s.getvalue(), ps.stats))
+            if is_profiling:
+                if pr.getstats():
+                    logger.error("Profiler is already enabled when it shouldn't be. This indicates a bug in the previous frame.")
+                    is_profiling = False
+                else:
+                    pr.enable()
 
-            # Print summary and profile info if frame time exceeds threshold
-            if frame_time > 0.030:  # 30ms threshold
-                print(f"\nSlow frame detected: {frame_time*1000:.2f}ms")
-                print("Comparison with previous frame:")
-                print_frame_comparison(last_frames)
+            sim_state.update()
+            sim_state.ui.update(sim_state)
 
-            pr.clear()
+            frame_time = time.time() - frame_start
+            frame_times.append(frame_time)
 
-        frame_count += 1
+            if is_profiling:
+                pr.disable()
+                
+                # Store the profiling data for this frame
+                s = io.StringIO()
+                ps = pstats.Stats(pr, stream=s).sort_stats('cumulative')
+                last_frames.append((frame_time, s.getvalue(), ps.stats))
 
-        # Calculate FPS every second
-        if current_time - last_fps_calc_time >= 2.0:
-            sim_state.framerate = frame_count / (current_time - last_fps_calc_time)
-            frame_count = 0
-            last_fps_calc_time = current_time
+                # Print summary and profile info if frame time exceeds threshold
+                if frame_time > 0.030:  # 30ms threshold
+                    logger.info(f"\nSlow frame detected: {frame_time*1000:.2f}ms")
+                    logger.info("Comparison with previous frame:")
+                    print_frame_comparison(last_frames)
 
-        # Regular summary every 10 seconds
-        if current_time - last_print_time >= 10:
-            print_simulation_summary(sim_state, frame_times)
-            last_print_time = current_time
-            frame_times = []
-        
-        if sim_state.ui.should_exit:
+                pr.clear()
+
+            frame_count += 1
+
+            current_time = time.time()
+
+            # Calculate FPS every second
+            if current_time - last_fps_calc_time >= 1.0:
+                sim_state.framerate = frame_count / (current_time - last_fps_calc_time)
+                frame_count = 0
+                last_fps_calc_time = current_time
+
+            # Regular summary every 10 seconds
+            if current_time - last_print_time >= 10.0:
+                print_simulation_summary(sim_state, frame_times)
+                last_print_time = current_time
+                frame_times = []
+            
+            if sim_state.ui.should_exit:
+                timer_thread.stop()
+                event_loop.quit()
+
+        except Exception as e:
+            logger.error(f"Exception in simulation_step: {e}")
+            logger.error(traceback.format_exc())
             timer_thread.stop()
             event_loop.quit()
+            raise  # Re-raise the exception to be caught in the main thread
 
     timer_thread.timeout.connect(simulation_step)
     timer_thread.start()
 
-    event_loop.exec()
-    timer_thread.wait()  # Wait for the thread to finish
+    try:
+        event_loop.exec()
+    except Exception as e:
+        logger.critical(f"Simulation halted due to exception: {e}")
+    finally:
+        timer_thread.stop()
+        timer_thread.wait()  # Wait for the thread to finish
+
+    if not sim_state.ui.should_exit:
+        raise RuntimeError("Simulation ended unexpectedly")
+
+    # Print final summary or perform any cleanup tasks here
+    print_final_summary(sim_state)
 
 def print_frame_comparison(frames):
     if len(frames) < 2:

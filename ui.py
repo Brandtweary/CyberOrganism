@@ -1,6 +1,6 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
-from PySide6.QtGui import QFont, QColor, QPalette, QCursor, QGuiApplication, QScreen
+from PySide6.QtGui import QFont, QColor, QPalette, QCursor, QGuiApplication, QScreen, QPainter, Qt
 from PySide6.QtCore import Qt, QSize
 from drawing import SimAreaWidget
 import time
@@ -15,6 +15,7 @@ class UI:
         
         self.main_window = QMainWindow()
         self.should_exit = False
+        self.loaded = False
 
         # Get the primary screen
         screen = QGuiApplication.primaryScreen()
@@ -201,13 +202,22 @@ class UI:
     def update(self, sim_state):
         if sim_state.frame_count <= sim_state.loading_frames:
             # Keep UI elements hidden during loading
-            return
-        else:
+            self.hide_ui_elements()
+            self.draw_loading_screen()
+        elif not self.loaded:
             # Show UI elements after loading is complete
             self.show_ui_elements()
+            self.loaded = True
 
         self.sim_area.draw_simulation(sim_state)
         self.update_debug_info()
+
+    def draw_loading_screen(self):
+        # Draw a black rectangle covering the entire screen
+        painter = QPainter(self.main_window)
+        painter.fillRect(self.main_window.rect(), Qt.black)
+        painter.end()
+        self.main_window.update()
 
 class CollapsibleBox(QWidget):
     def __init__(self, title="", parent=None):

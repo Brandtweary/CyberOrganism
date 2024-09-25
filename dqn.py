@@ -36,7 +36,7 @@ class DQN(ReinforcementLearningAlgorithm):
         self.main_network_buffer = [self.main_network, copy.deepcopy(self.main_network)]
         self.target_network_buffer = [self.target_network, copy.deepcopy(self.target_network)]
         self.current_buffer = 0
-        self.epsilon_buffer = [organism.epsilon, organism.epsilon]  # Initialize both with the same epsilon
+        self.target_buffer = 0
         self.learn_queue = queue.Queue()
         self.learn_thread = threading.Thread(target=self._learn_worker, daemon=True)
         self.learn_thread.start()
@@ -49,12 +49,18 @@ class DQN(ReinforcementLearningAlgorithm):
 
     def select_action(self, state: torch.Tensor) -> int:
         state = state.to(self.device)
-        if random.random() < self.epsilon_buffer[self.current_buffer]:
-            return random.randint(0, self.output_size - 1)
-        else:
-            with torch.no_grad():
-                q_values = self.main_network_buffer[self.current_buffer](state)
-                return q_values.argmax().item()
+        with self.network_lock:
+            if random.random() < self.organism.epsilon:
+                self.decay_epsilon()
+                return random.randint(0, self.output_size - 1)
+            else:
+                with torch.no_grad():
+                    q_values = self.main_network_buffer[self.current_buffer](state)
+                    self.decay_epsilon()
+                    return self.boltzmann_exploration(q_values)
+    
+    def decay_epsilon(self):
+        self.organism.epsilon = max(self.organism.epsilon_min, self.organism.epsilon * self.organism.epsilon_decay)
 
     def boltzmann_exploration(self, q_values: torch.Tensor) -> int:
         probabilities = F.softmax(q_values / self.organism.boltzmann_temperature, dim=0)
@@ -65,24 +71,19 @@ class DQN(ReinforcementLearningAlgorithm):
         if not self.organism.replay_buffer.can_sample():
             return {}
 
-        # Get hyperparameters from state
+        # Get all necessary parameters from state snapshot
         organism_state = state_snapshot.get_state(self.organism.id)
-        learning_rate = organism_state['learning_rate']
         gamma = organism_state['gamma']
         gradient_clip = organism_state['gradient_clip']
-        epsilon = self.epsilon_buffer[self.current_buffer]
-        epsilon_min = organism_state['epsilon_min']
-        epsilon_decay = organism_state['epsilon_decay']
+        training_steps = organism_state['training_steps']
+        target_update = organism_state['target_update']
         
         batch, idxs = self.organism.replay_buffer.sample()
         
-        # Use the non-current buffer for both main and target networks
         learning_network = self.main_network_buffer[1 - self.current_buffer]
-        target_network = self.target_network_buffer[1 - self.current_buffer]
-        
-        temp_optimizer = optim.AdamW(learning_network.parameters(), lr=learning_rate)
-        
-        temp_optimizer.zero_grad()
+        target_network = self.target_network_buffer[1 - self.target_buffer]
+
+        self.optimizer.zero_grad()
         metrics = {self.action_mapping[i].name: {"loss": [], "current_q": [], "expected_q": []} for i in range(self.output_size)}
         
         for i, experience in enumerate(batch):
@@ -122,34 +123,17 @@ class DQN(ReinforcementLearningAlgorithm):
 
         torch.nn.utils.clip_grad_norm_(learning_network.parameters(), max_norm=gradient_clip)
         
-        temp_optimizer.step()
+        self.optimizer.step()
 
         with self.network_lock:
-            # Swap buffers
-            next_buffer = 1 - self.current_buffer
-            self.current_buffer = next_buffer
-            # Update the main network buffer with the learned weights
             self.main_network_buffer[self.current_buffer].load_state_dict(learning_network.state_dict())
-            # Update epsilon for the next buffer
-            new_epsilon = max(epsilon_min, epsilon * epsilon_decay)
-            self.epsilon_buffer[next_buffer] = new_epsilon
-            # Update target network if necessary
-            self.organism.training_steps += 1
-            if self.organism.training_steps % self.organism.target_update == 0:
-                self.target_network_buffer[self.current_buffer].load_state_dict(self.main_network_buffer[self.current_buffer].state_dict())
+            self.current_buffer = 1 - self.current_buffer
+            new_training_steps = training_steps + 1
+            if new_training_steps % target_update == 0:
+                self.target_network_buffer[self.target_buffer].load_state_dict(learning_network.state_dict())
+                self.target_buffer = 1 - self.target_buffer
+
+        # Add parameter diffs
+        self.organism.add_param_diff('training_steps', 1)
 
         return metrics
-
-    def update_target_network(self) -> None:
-        self.target_network.load_state_dict(self.main_network.state_dict())
-    
-    def decay_epsilon(self):
-        self.organism.epsilon = max(self.organism.epsilon_min, self.organism.epsilon * self.organism.epsilon_decay)
-
-    def get_current_epsilon(self) -> float:
-        return self.epsilon_buffer[self.current_buffer]
-
-    def set_epsilon(self, new_epsilon: float):
-        with self.network_lock:
-            next_buffer = 1 - self.current_buffer
-            self.epsilon_buffer[next_buffer] = new_epsilon

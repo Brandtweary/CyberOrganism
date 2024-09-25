@@ -131,6 +131,21 @@ class StateSnapshot:
     @property
     def object_states(self):
         return self._state['object_states']
+    
+    def synchronize_param_diffs(self, objects: List[Any]):
+        for obj in objects:
+            if hasattr(obj, 'get_and_clear_param_diffs'):
+                diffs = obj.get_and_clear_param_diffs()
+                for param_name, diff_list in diffs.items():
+                    current_value = getattr(obj, param_name)
+                    for diff in diff_list:
+                        if isinstance(diff, (int, float)):
+                            current_value += diff
+                        elif callable(diff):
+                            current_value = diff(current_value)
+                        else:
+                            current_value = diff
+                    setattr(obj, param_name, current_value)
 
     def update_snapshot_with_objects(self, objects: List[Any]):
         '''
@@ -142,6 +157,8 @@ class StateSnapshot:
         for obj in objects:
             if self.get_state(obj.id) is None:
                 raise KeyError(f"No state found for object: {obj.id}")
+        
+        self.synchronize_param_diffs(objects)
 
         state_changes = {}  # for this to work correctly, do not modify state dicts or instance params outside of the update simulation loop
         for obj in objects:

@@ -8,7 +8,8 @@ from prioritized_experience_replay import PrioritizedExperienceReplay, Experienc
 from enums import Action
 from RL_algorithm import ReinforcementLearningAlgorithm
 from dqn import DQN
-import threading
+from threading import Lock
+from collections import defaultdict
 
 
 class Organism:
@@ -107,6 +108,10 @@ class Organism:
             hidden_layers=self.hidden_layers,
             learning_rate=self.learning_rate
         ) 
+
+        # Thread-safe parameter diffs
+        self.param_diffs = defaultdict(list)
+        self.param_diffs_lock = Lock()
 
     def set_input_parameters(self) -> None:
         """Initialize all input parameters to 0.0."""
@@ -288,6 +293,8 @@ class Organism:
     def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
         """Calculate the reward based on the old and new states."""
         old_organism_state = old_state.get_state(self.id)
+        if old_organism_state is None:
+            raise ValueError(f"Old organism state not found for ID: {self.id}")
         
         old_attention_x, old_attention_y = old_organism_state['attention_x'], old_organism_state['attention_y']
         new_attention_x, new_attention_y = self.attention_x, self.attention_y
@@ -414,3 +421,13 @@ class Organism:
             self.nutrition -= 30
             return True
         return False
+
+    def add_param_diff(self, param_name: str, diff_value: Any):
+        with self.param_diffs_lock:
+            self.param_diffs[param_name].append(diff_value)
+
+    def get_and_clear_param_diffs(self):
+        with self.param_diffs_lock:
+            diffs = dict(self.param_diffs)
+            self.param_diffs.clear()
+        return diffs
