@@ -51,15 +51,15 @@ class Organism:
         self.attention_x: float = initial_position[0]
         self.attention_y: float = initial_position[1]
         self.marked_for_deletion: bool = False
-        self.energy: float = 5.0
+        self.energy: float = 10.0
         self.nutrition: float = 0.0
       
         # Organismal Parameters
         self.movement_speed: float = 1.0
         self.attention_speed: float = 3.0 
         self.detection_radius: int = 100
-        self.energy_consumption: float = 0.0
-        self.nutrition_consumption: float = 0.0
+        self.energy_consumption: float = 0.001
+        self.nutrition_consumption: float = 0.0001
         self.max_nearest_items: int = 1
         self.nearest_item_params: int = 3  # distance, direction, reward
 
@@ -110,7 +110,7 @@ class Organism:
         ) 
 
         # Thread-safe parameter diffs
-        self.param_diffs = defaultdict(list)
+        self.param_diffs = defaultdict(list)  # not being used currently, but these are for syncing params across threads
         self.param_diffs_lock = Lock()
 
     def set_input_parameters(self) -> None:
