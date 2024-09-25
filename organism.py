@@ -42,7 +42,7 @@ class Organism:
         self.display_parameters: List[str] = [
             'energy',
             'nutrition',
-            'epsilon'
+            'epsilon',
         ]
         
         # Simulation State Parameters

@@ -27,19 +27,11 @@ class DQNNetwork(nn.Module):
 class DQN(ReinforcementLearningAlgorithm):
     def __init__(self, organism: Any, action_mapping: Dict[int, str], input_size: int, hidden_size: int, output_size: int, hidden_layers: int, learning_rate: float):
         super().__init__(organism, action_mapping, input_size, hidden_size, output_size, hidden_layers, learning_rate)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.main_network = self.main_network.to(self.device)  # should probably be moved to base class
         self.target_network = self.create_network().to(self.device)
         self.target_network.load_state_dict(self.main_network.state_dict())
         self.target_network.eval()
-        self.network_lock = threading.Lock()  # this should be moved to base class
-        self.main_network_buffer = [self.main_network, copy.deepcopy(self.main_network)]
         self.target_network_buffer = [self.target_network, copy.deepcopy(self.target_network)]
-        self.current_buffer = 0
         self.target_buffer = 0
-        self.learn_queue = queue.Queue()
-        self.learn_thread = threading.Thread(target=self._learn_worker, daemon=True)
-        self.learn_thread.start()
 
     def create_network(self) -> nn.Module:
         return DQNNetwork(self.input_size, self.hidden_size, self.output_size, self.hidden_layers)
@@ -75,7 +67,6 @@ class DQN(ReinforcementLearningAlgorithm):
         organism_state = state_snapshot.get_state(self.organism.id)
         gamma = organism_state['gamma']
         gradient_clip = organism_state['gradient_clip']
-        training_steps = organism_state['training_steps']
         target_update = organism_state['target_update']
         
         batch, idxs = self.organism.replay_buffer.sample()
@@ -89,7 +80,6 @@ class DQN(ReinforcementLearningAlgorithm):
         for i, experience in enumerate(batch):
             state, action, reward, next_state = experience
             
-            # Ensure tensors are on the correct device
             state = state.to(self.device)
             next_state = next_state.to(self.device)
             reward = torch.tensor(reward, dtype=torch.float32).to(self.device)
@@ -128,12 +118,9 @@ class DQN(ReinforcementLearningAlgorithm):
         with self.network_lock:
             self.main_network_buffer[self.current_buffer].load_state_dict(learning_network.state_dict())
             self.current_buffer = 1 - self.current_buffer
-            new_training_steps = training_steps + 1
-            if new_training_steps % target_update == 0:
+            self.training_steps += 1
+            if self.training_steps % target_update == 0:
                 self.target_network_buffer[self.target_buffer].load_state_dict(learning_network.state_dict())
                 self.target_buffer = 1 - self.target_buffer
-
-        # Add parameter diffs
-        self.organism.add_param_diff('training_steps', 1)
 
         return metrics

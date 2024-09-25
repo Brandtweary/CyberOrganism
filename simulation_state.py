@@ -15,6 +15,7 @@ class SimulationState:
         self.memory_usage = psutil.virtual_memory().percent
         self.available_memory = psutil.virtual_memory().available / (1024 * 1024)
         self.framerate = 0.0
+        self.learn_queue_size = 0
             
         # Summary statistics
         self.time_low_loss = 0
@@ -48,6 +49,7 @@ class SimulationState:
             f"CPU Usage: {self.cpu_usage:.1f}%",
             f"Memory Usage: {self.memory_usage:.1f}%",
             f"Available Memory: {self.available_memory:.1f} MB",
+            f"Learn Queue: {self.learn_queue_size}",
             f"FPS: {self.framerate:.1f}",
             f"Simulation Time: {int(self.total_time)} seconds",
         ]
@@ -86,6 +88,7 @@ class SimulationState:
         self.cpu_usage = psutil.cpu_percent()
         self.memory_usage = psutil.virtual_memory().percent
         self.available_memory = psutil.virtual_memory().available / (1024 * 1024)
+        self.learn_queue_size = self.test_organism.RL_algorithm.learn_queue.qsize()
 
         # Update training statistics
         self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
