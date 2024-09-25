@@ -24,7 +24,9 @@ class DQNNetwork(nn.Module):
 class DQN(ReinforcementLearningAlgorithm):
     def __init__(self, organism: Any, action_mapping: Dict[int, str], input_size: int, hidden_size: int, output_size: int, hidden_layers: int, learning_rate: float):
         super().__init__(organism, action_mapping, input_size, hidden_size, output_size, hidden_layers, learning_rate)
-        self.target_network = self.create_network()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.main_network = self.main_network.to(self.device)
+        self.target_network = self.create_network().to(self.device)
         self.target_network.load_state_dict(self.main_network.state_dict())
         self.target_network.eval()
 
@@ -35,6 +37,7 @@ class DQN(ReinforcementLearningAlgorithm):
         return optim.AdamW(self.main_network.parameters(), lr=self.learning_rate)
 
     def select_action(self, state: torch.Tensor) -> Action:
+        state = state.to(self.device)
         if random.random() < self.organism.epsilon:
             action_index = random.randint(0, self.output_size - 1)
         else:
@@ -62,10 +65,11 @@ class DQN(ReinforcementLearningAlgorithm):
         for i, experience in enumerate(batch):
             state, action, reward, next_state = experience
             
-            state = state.unsqueeze(0)
-            next_state = next_state.unsqueeze(0)
-            action_index = torch.tensor([action.value], dtype=torch.long) 
-            reward = torch.tensor([reward], dtype=torch.float32)
+            state = state.unsqueeze(0).to(self.device)
+            next_state = next_state.unsqueeze(0).to(self.device)
+            action_index = torch.tensor([action.value], dtype=torch.long).to(self.device)
+            reward = torch.tensor([reward], dtype=torch.float32).to(self.device)
+
             current_q_value = self.main_network(state).gather(1, action_index.unsqueeze(1))
 
             with torch.no_grad():
