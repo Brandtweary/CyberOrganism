@@ -8,6 +8,7 @@ from prioritized_experience_replay import PrioritizedExperienceReplay, Experienc
 from enums import Action
 from RL_algorithm import ReinforcementLearningAlgorithm
 from dqn import DQN
+import threading
 
 
 class Organism:
@@ -123,10 +124,10 @@ class Organism:
         }
 
     def initialize_training_metrics(self) -> Dict[str, Any]:
-        metrics = {
-            action_value: self.create_metric_structure()
-            for action_value in self.action_mapping.keys()
-        }
+        metrics = {}
+        for action in self.action_mapping.values():
+            metrics[action.name] = self.create_metric_structure()
+        
         metrics["combined_averages"] = self.create_metric_structure()
         metrics["reward"] = {
             "reward_history": deque(maxlen=self.window_size),
@@ -220,9 +221,10 @@ class Organism:
 
         return [nearest_item] if nearest_item else []
 
-    def update_attention_point(self, action: Action) -> Tuple[float, float]:
+    def update_attention_point(self, action_index: int) -> Tuple[float, float]:
         """Update the attention point based on the given action."""
         dx, dy = 0, 0
+        action = self.action_mapping[action_index]  # Map action index to Action enum
         if action == Action.UP:
             dy = -self.attention_speed
         elif action == Action.DOWN:
@@ -262,8 +264,8 @@ class Organism:
     def update_state(self, external_state: StateSnapshot) -> Dict[str, Any]:
         """Update the organism's state and return the changes to be applied externally."""
         internal_state = self.get_internal_state(external_state)
-        action = self.RL_algorithm.select_action(internal_state)
-        attention_vector = self.update_attention_point(action)
+        action_index = self.RL_algorithm.select_action(internal_state)
+        attention_vector = self.update_attention_point(action_index)
         movement_vector = self.move(attention_vector)
         
         external_state_change = {
@@ -277,7 +279,7 @@ class Organism:
         
         self.current_experience = Experience(
             state=internal_state,
-            action=action,
+            action=action_index,
             reward=None,  # Will be set in apply_state
             next_state=None  # Will be set in apply_state
         )
@@ -352,24 +354,25 @@ class Organism:
             self.replay_buffer.add(updated_experience)
         
         self.current_experience = None
-        metrics = self.RL_algorithm.learn()
-        self.record_training_metrics(metrics, total_reward)
-
+        
+        # Queue the learning task instead of starting a new thread
+        self.RL_algorithm.queue_learn(new_state, total_reward)
+    
     def record_training_metrics(self, metrics: Dict[str, Any], total_reward: float) -> None:
         """Record and update training metrics including loss, Q-values, and rewards."""
         combined_loss = []
         combined_current_q = []
         combined_expected_q = []
 
-        for action_value, action_metrics in metrics.items():
+        for action_name, action_metrics in metrics.items():
             if action_metrics["loss"]:
-                self.training_metrics[action_value]["loss_history"].extend(action_metrics["loss"])
-                self.training_metrics[action_value]["current_q_history"].extend(action_metrics["current_q"])
-                self.training_metrics[action_value]["expected_q_history"].extend(action_metrics["expected_q"])
+                self.training_metrics[action_name]["loss_history"].extend(action_metrics["loss"])
+                self.training_metrics[action_name]["current_q_history"].extend(action_metrics["current_q"])
+                self.training_metrics[action_name]["expected_q_history"].extend(action_metrics["expected_q"])
                 
-                self.training_metrics[action_value]["loss_window_avg"] = sum(self.training_metrics[action_value]["loss_history"]) / len(self.training_metrics[action_value]["loss_history"])
-                self.training_metrics[action_value]["current_q_window_avg"] = sum(self.training_metrics[action_value]["current_q_history"]) / len(self.training_metrics[action_value]["current_q_history"])
-                self.training_metrics[action_value]["expected_q_window_avg"] = sum(self.training_metrics[action_value]["expected_q_history"]) / len(self.training_metrics[action_value]["expected_q_history"])
+                self.training_metrics[action_name]["loss_window_avg"] = sum(self.training_metrics[action_name]["loss_history"]) / len(self.training_metrics[action_name]["loss_history"])
+                self.training_metrics[action_name]["current_q_window_avg"] = sum(self.training_metrics[action_name]["current_q_history"]) / len(self.training_metrics[action_name]["current_q_history"])
+                self.training_metrics[action_name]["expected_q_window_avg"] = sum(self.training_metrics[action_name]["expected_q_history"]) / len(self.training_metrics[action_name]["expected_q_history"])
 
                 combined_loss.extend(action_metrics["loss"])
                 combined_current_q.extend(action_metrics["current_q"])

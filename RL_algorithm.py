@@ -5,6 +5,9 @@ import torch.optim as optim
 from typing import Any, Dict, Tuple
 from enums import Action
 from training_statistics import TrainingStatistics
+from state_snapshot import StateSnapshot
+import queue
+import threading
 
 
 class ReinforcementLearningAlgorithm(ABC):
@@ -34,26 +37,40 @@ class ReinforcementLearningAlgorithm(ABC):
         self.optimizer = self.create_optimizer()
         self.training_stats = TrainingStatistics(self.main_network, self.optimizer)
 
+        self.learn_queue = queue.Queue()
+        self.learn_thread = threading.Thread(target=self._learn_worker, daemon=True)
+        self.learn_thread.start()
+
     @abstractmethod
-    def create_network(self) -> nn.Module:
+    def create_network(self) -> Any:
         pass
 
     @abstractmethod
-    def create_optimizer(self) -> optim.Optimizer:
+    def create_optimizer(self) -> Any:
         pass
 
     @abstractmethod
-    def select_action(self, state: torch.Tensor) -> Action:
+    def select_action(self, state: Any) -> Action:
         pass
+
+    def queue_learn(self, state_snapshot: StateSnapshot, total_reward: float):
+        self.learn_queue.put((state_snapshot, total_reward))
+
+    def _learn_worker(self):
+        while True:
+            state_snapshot, total_reward = self.learn_queue.get()
+            metrics = self._learn(state_snapshot)
+            self.organism.record_training_metrics(metrics, total_reward)
+            self.learn_queue.task_done()
 
     @abstractmethod
-    def learn(self) -> Dict[str, float]:
+    def _learn(self, state_snapshot: StateSnapshot) -> Dict[str, Any]:
         pass
 
-    def get_network_parameters(self) -> Dict[str, torch.Tensor]:
+    def get_network_parameters(self) -> Dict[str, Any]:
         return {name: param.data for name, param in self.main_network.named_parameters()}
 
-    def load_network_parameters(self, parameters: Dict[str, torch.Tensor]) -> None:
+    def load_network_parameters(self, parameters: Dict[str, Any]) -> None:
         for name, param in self.main_network.named_parameters():
             if name in parameters:
                 param.data.copy_(parameters[name])

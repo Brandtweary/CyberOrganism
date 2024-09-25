@@ -46,12 +46,12 @@ def run_simulation(sim_state):
     @Slot()
     def simulation_step():
         nonlocal last_print_time, frame_count, last_fps_calc_time, start_time
-        nonlocal frame_times, pr, is_profiling, last_frames
+        nonlocal frame_times, pr, is_profiling, last_frames, sim_state
 
         current_time = time.time()
 
         # Start profiling after 1 second
-        if debug and not is_profiling and current_time - start_time >= 1.0:
+        if debug and not is_profiling and sim_state.frame_count > sim_state.loading_frames + 2:
             is_profiling = True
             print("Warm-up complete. Starting profiling...")
 
@@ -85,7 +85,7 @@ def run_simulation(sim_state):
         frame_count += 1
 
         # Calculate FPS every second
-        if current_time - last_fps_calc_time >= 1.0:
+        if current_time - last_fps_calc_time >= 2.0:
             sim_state.framerate = frame_count / (current_time - last_fps_calc_time)
             frame_count = 0
             last_fps_calc_time = current_time

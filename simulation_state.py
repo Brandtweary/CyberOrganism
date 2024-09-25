@@ -32,6 +32,9 @@ class SimulationState:
         self.last_updated_section = -1
         self.ui_update_interval = 0.1
 
+        self.frame_count = 0
+        self.loading_frames = 30
+
     def generate_organism_stats(self):
         stats = []
         for param, value in self.display_parameters.items():
@@ -64,7 +67,9 @@ class SimulationState:
                             stats.append(f"  {stat_name}: {formatted_value}")
         return stats
 
-    def update(self):        
+    def update(self):
+        self.frame_count += 1
+        
         self.sim_engine.update_simulation()
         self.current_state = self.sim_engine.current_state
         self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
@@ -86,7 +91,11 @@ class SimulationState:
         self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
         self.training_record_stats = self.test_organism.RL_algorithm.training_stats.record_stats
 
-        # Staggered UI update
+        # Update UI if we're past the loading frames
+        if self.frame_count > self.loading_frames - 2:
+            self.update_ui()
+
+    def update_ui(self):
         if self.last_updated_section == -1:
             # First update: update all sections
             organism_stats = self.generate_organism_stats()

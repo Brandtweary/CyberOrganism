@@ -38,8 +38,14 @@ class UI:
         self.set_styles()
         self.setup_key_handlers()
         self.main_window.showFullScreen()
+        
+        # Initially hide all UI elements except the main window
+        self.hide_ui_elements()
 
     def set_styles(self):
+        # Set main window background color to black
+        self.main_window.setStyleSheet("background-color: black;")
+
         # Set sim_area background color to black
         self.sim_area.setStyleSheet("background-color: black;")
 
@@ -56,6 +62,14 @@ class UI:
                 color: #00FF00;  /* Green text */
             }
         """)
+
+    def hide_ui_elements(self):
+        self.left_sidebar.hide()
+        self.sim_area.hide()
+
+    def show_ui_elements(self):
+        self.left_sidebar.show()
+        self.sim_area.show()
 
     def setup_main_window(self):
         self.main_window.setWindowTitle("CyberOrganism")
@@ -185,6 +199,13 @@ class UI:
         self.debug_info_label.setText(debug_info)
 
     def update(self, sim_state):
+        if sim_state.frame_count <= sim_state.loading_frames:
+            # Keep UI elements hidden during loading
+            return
+        else:
+            # Show UI elements after loading is complete
+            self.show_ui_elements()
+
         self.sim_area.draw_simulation(sim_state)
         self.update_debug_info()
 
@@ -212,8 +233,6 @@ class CollapsibleBox(QWidget):
         """)
         self.toggle_button.setCheckable(True)
         self.toggle_button.setChecked(False)
-
-        self.toggle_button.clicked.connect(self.on_toggle)
 
         self.content_area = QWidget()
         self.content_area.setVisible(False)

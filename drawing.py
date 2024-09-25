@@ -2,7 +2,6 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QPainter, QColor, QCursor
 from PySide6.QtCore import QRectF, Qt
 from state_snapshot import ObjectType
-import time
 from shared_resources import debug
 
 class SimAreaWidget(QWidget):
