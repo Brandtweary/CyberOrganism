@@ -3,6 +3,7 @@ from uuid import UUID
 import math
 import copy
 from enums import ObjectType
+from summary_logger import summary_logger
 
 
 class StateSnapshot:
@@ -118,7 +119,7 @@ class StateSnapshot:
             # Update the state snapshot
             self.update_state(uuid, state)
         else:
-            print(f"Warning: Parameter '{param_name}' is already synchronized.")
+            summary_logger.warning(f"Warning: Parameter '{param_name}' is already synchronized.")
 
     @property
     def grid_size(self):
@@ -177,7 +178,7 @@ class StateSnapshot:
             if hasattr(self, method_name):
                 getattr(self, method_name)(obj_id, value, obj, obj_state)
             else:
-                print(f"Warning: No method to process {key} for object {obj_id}")
+                summary_logger.warning(f"Warning: No method to process {key} for object {obj_id}")
     
     def process_spawn_food(self, item_id, spawn_food: bool, item, item_state):
         if spawn_food:
