@@ -211,15 +211,18 @@ def print_simulation_summary(sim_state, frame_times):
     print(f"Avg frame time: {avg_frame_time*1000:.2f}ms (Max: {max_frame_time*1000:.2f}ms)")
     print("--------------------")
 
+def format_stats(stats_dict):
+    return [f"{key}: {value}" for key, value in stats_dict.items()]
+
 def print_simulation_stats(sim_state):
     print("\n--- Organism Statistics ---")
-    for stat in sim_state.generate_organism_stats():
+    for stat in format_stats(sim_state.generate_organism_stats()):
         print(stat)
     print("\n--- Performance Statistics ---")
-    for stat in sim_state.generate_performance_stats():
+    for stat in format_stats(sim_state.generate_performance_stats()):
         print(stat)
     print("\n--- Training Statistics ---")
-    for stat in sim_state.generate_training_stats():
+    for stat in format_stats(sim_state.generate_training_stats()):
         print(stat)
     print("---------------------------------------")
 
@@ -234,7 +237,7 @@ def print_final_summary(sim_state):
         print(f"Overall average frame time: {overall_avg_total_frame_time*1000:.2f}ms")
     
     print("\n--- Training Statistics ---")
-    for stat in sim_state.generate_training_stats():
+    for stat in format_stats(sim_state.generate_training_stats()):
         print(stat)
     
     print("\n=== Logged Messages ===")

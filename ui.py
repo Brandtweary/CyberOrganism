@@ -5,6 +5,8 @@ from PySide6.QtCore import Qt, QSize
 from drawing import SimAreaWidget
 import time
 from shared_resources import debug
+from widgets import StatBlock, CollapsibleBox
+
 
 class UI:
     def __init__(self):
@@ -94,7 +96,6 @@ class UI:
         self.sim_area = SimAreaWidget(self.FPS, self.main_window)
         self.sim_area.setGeometry(0, 0, self.WIDTH, self.HEIGHT)
 
-
     def setup_left_sidebar(self):
         # Create the actual sidebar widget
         self.left_sidebar = QWidget(self.main_window)
@@ -107,11 +108,11 @@ class UI:
         sidebar_layout.setSpacing(0)  # Remove spacing between widgets
         self.left_sidebar.setLayout(sidebar_layout)
 
-        self.setup_stat_section("Organism Statistics", sidebar_layout, "organism_stats_label")
-        self.setup_stat_section("Performance Statistics", sidebar_layout, "performance_stats_label")
-        self.setup_stat_section("Training Metrics", sidebar_layout, "training_metrics_label")
+        self.setup_stat_section("Organism Statistics", sidebar_layout, "organism_stats")
+        self.setup_stat_section("Performance Statistics", sidebar_layout, "performance_stats")
+        self.setup_stat_section("Training Metrics", sidebar_layout, "training_metrics")
         if debug:
-            self.setup_stat_section("Debug Info", sidebar_layout, "debug_info_label", expanded=False)  # Add this line
+            self.setup_stat_section("Debug Info", sidebar_layout, "debug_info", expanded=False)  # Add this line
 
         sidebar_layout.addStretch(1)  # This pushes everything to the top
 
@@ -123,13 +124,14 @@ class UI:
         parent_layout.addWidget(stats_box)
         
         stats_layout = QVBoxLayout()
-        stats_label = QLabel("", self.left_sidebar)
-        stats_label.setWordWrap(True)  # Allow text to wrap
-        stats_layout.addWidget(stats_label)
+        stats_layout.setSpacing(3)
+        stats_layout.setContentsMargins(5, 5, 5, 5)
+        
+        setattr(self, f"{label_attr_name}_layout", stats_layout)
+        setattr(self, f"{label_attr_name}_blocks", {})
         
         stats_box.setContentLayout(stats_layout)
         stats_box.setExpanded(expanded)
-        setattr(self, label_attr_name, stats_label)
 
     def setup_key_handlers(self):
         self.main_window.keyPressEvent = self.handle_key_press
@@ -155,32 +157,59 @@ class UI:
 
     def update_left_sidebar(self, organism_stats, performance_stats, training_metrics):
         if organism_stats is not None:
-            self.organism_stats_label.setText(self.format_stats(organism_stats))
+            self.update_stat_section(organism_stats, "organism_stats")
         if performance_stats is not None:
-            self.performance_stats_label.setText(self.format_stats(performance_stats))
+            self.update_stat_section(performance_stats, "performance_stats")
         if training_metrics is not None:
-            self.training_metrics_label.setText(self.format_training_metrics(training_metrics))
-
-    def format_stats(self, stats):
-        return "\n".join(stats)
+            formatted_training_metrics = self.format_training_metrics(training_metrics)
+            self.update_stat_section(formatted_training_metrics, "training_metrics")
 
     def format_training_metrics(self, training_metrics):
-        formatted_metrics = []
+        formatted_metrics = {}
         combined = training_metrics["combined_averages"]
-        formatted_metrics.extend([
-            f"Combined Loss: {combined['loss_window_avg']:.4f}",
-            f"Combined Q-Value: {combined['current_q_window_avg']:.4f}",
-            f"Combined Expected Q: {combined['expected_q_window_avg']:.4f}",
-            f"Reward: {training_metrics['reward']['reward_window_avg']:.4f}"
-        ])
+        
+        # Reward
+        formatted_metrics["Reward"] = f"{training_metrics['reward']['reward_window_avg']:.3f}"
+        
+        # Combined Loss
+        formatted_metrics["Combined Loss"] = f"{combined['loss_window_avg']:.3f}"
+        
+        # Action-specific Losses
         for action, metrics in training_metrics.items():
             if action not in ["combined_averages", "reward"]:
-                formatted_metrics.extend([
-                    f"Action {action} Loss: {metrics['loss_window_avg']:.4f}",
-                    f"Action {action} Q-Value: {metrics['current_q_window_avg']:.4f}",
-                    f"Action {action} Expected Q: {metrics['expected_q_window_avg']:.4f}"
-                ])
-        return "\n".join(formatted_metrics)
+                formatted_metrics[f"{action} Loss"] = f"{metrics['loss_window_avg']:.3f}"
+        
+        # Combined Q-Value
+        formatted_metrics["Combined Q-Value"] = f"{combined['current_q_window_avg']:.3f}"
+        
+        # Combined Expected Q
+        formatted_metrics["Combined Expected Q"] = f"{combined['expected_q_window_avg']:.3f}"
+        
+        return formatted_metrics
+
+    def update_stat_section(self, stats, section_name):
+        layout = getattr(self, f"{section_name}_layout")
+        blocks = getattr(self, f"{section_name}_blocks")
+
+        for name, value in stats.items():
+            if name not in blocks:
+                block = StatBlock(name, value)
+                layout.addWidget(block)
+                blocks[name] = block
+            else:
+                blocks[name].update_value(value)
+        
+        for name in list(blocks.keys()):
+            if name not in stats:
+                blocks[name].deleteLater()
+                del blocks[name]
+        
+        # Find the maximum width of name labels
+        max_width = max(block.name_label.sizeHint().width() for block in blocks.values())
+
+        # Set all name labels to the maximum width
+        for block in blocks.values():
+            block.set_name_width(max_width)
 
     def update_debug_info(self):
         if not debug:
@@ -201,15 +230,17 @@ class UI:
         # Get the main window geometry
         window_geometry = self.main_window.geometry()
         
-        debug_info = f"Sim Area: {sim_area_width}x{sim_area_height}\n"
-        debug_info += f"Mouse Position: ({mouse_x}, {mouse_y})\n"
-        debug_info += f"Device Pixel Ratio: {device_pixel_ratio}\n"
-        debug_info += f"Screen Size: {screen_size.width()}x{screen_size.height()}\n"
-        debug_info += f"Window Geometry: {window_geometry.width()}x{window_geometry.height()} at ({window_geometry.x()}, {window_geometry.y()})\n"
-        debug_info += f"Logical DPI: {screen.logicalDotsPerInch()}\n"
-        debug_info += f"Physical DPI: {screen.physicalDotsPerInch()}"
+        debug_info = {
+            "Sim Area": f"{sim_area_width}x{sim_area_height}",
+            "Mouse Position": f"({mouse_x}, {mouse_y})",
+            "Device Pixel Ratio": f"{device_pixel_ratio}",
+            "Screen Size": f"{screen_size.width()}x{screen_size.height()}",
+            "Window Geometry": f"{window_geometry.width()}x{window_geometry.height()} at ({window_geometry.x()}, {window_geometry.y()})",
+            "Logical DPI": f"{screen.logicalDotsPerInch()}",
+            "Physical DPI": f"{screen.physicalDotsPerInch()}"
+        }
         
-        self.debug_info_label.setText(debug_info)
+        self.update_stat_section(debug_info, "debug_info")
 
     def update(self, sim_state):
         if sim_state.frame_count <= sim_state.loading_frames:
@@ -222,61 +253,3 @@ class UI:
 
         self.sim_area.draw_simulation(sim_state)
         self.update_debug_info()
-
-class CollapsibleBox(QWidget):
-    def __init__(self, title="", parent=None):
-        super(CollapsibleBox, self).__init__(parent)
-
-        self.toggle_button = QPushButton(title)
-        
-        # Set font explicitly
-        font = QFont("Roboto Mono", 14)  # Adjust size as needed
-        self.toggle_button.setFont(font)
-        
-        self.toggle_button.setStyleSheet("""
-            QPushButton {
-                text-align: left;
-                padding: 5px;
-                background-color: #1A1A1A;  /* Dark gray, nearly black */
-                border: none;
-                color: #00FF00;  /* Ensure the button text is green */
-            }
-            QPushButton:hover {
-                background-color: #252525;  /* Slightly lighter */
-            }
-        """)
-        self.toggle_button.setCheckable(True)
-        self.toggle_button.setChecked(False)
-
-        self.content_area = QWidget()
-        self.content_area.setVisible(False)
-
-        lay = QVBoxLayout(self)
-        lay.setSpacing(0)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.addWidget(self.toggle_button)
-        lay.addWidget(self.content_area)
-
-        self.main_layout = QVBoxLayout()
-        self.content_area.setLayout(self.main_layout)
-
-        self.toggle_button.toggled.connect(self.on_toggle)  # Connect the signal
-
-    def on_toggle(self, checked):
-        self.content_area.setVisible(checked)
-        self.adjustSize()
-        self.updateGeometry()
-
-    def setContentLayout(self, layout):
-        # Remove all items from the main_layout
-        while self.main_layout.count():
-            item = self.main_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        # Add the new layout to main_layout
-        self.main_layout.addLayout(layout)
-
-    def setExpanded(self, expanded):
-        self.toggle_button.setChecked(expanded)
-        self.content_area.setVisible(expanded)

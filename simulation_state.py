@@ -41,37 +41,35 @@ class SimulationState:
         self.gpu_handle = nvmlDeviceGetHandleByIndex(0)
 
     def generate_organism_stats(self):
-        stats = []
+        stats = {}
         for param, value in self.display_parameters.items():
             formatted_name = self.format_parameter_name(param)
             formatted_value = f"{value:.3f}" if isinstance(value, float) else value
-            stats.append(f"{formatted_name}: {formatted_value}")
+            stats[formatted_name] = formatted_value
         return stats
 
     def generate_performance_stats(self):
-        stats = [
-            f"CPU Usage: {self.cpu_usage:.1f}%",
-            f"Memory Usage: {self.memory_usage:.1f}%",
-            f"Available Memory: {self.available_memory:.1f} MB",
-            f"GPU Usage: {self.gpu_usage:.1f}%",
-            f"Learn Queue: {self.learn_queue_size}",
-            f"FPS: {self.framerate:.1f}",
-            f"Simulation Time: {int(self.total_time)} seconds",
-        ]
-        return stats
-    
+        return {
+            "CPU Usage": f"{self.cpu_usage:.1f}%",
+            "Memory Usage": f"{self.memory_usage:.1f}%",
+            "Available Memory": f"{self.available_memory:.1f} MB",
+            "GPU Usage": f"{self.gpu_usage:.1f}%",
+            "Learn Queue": str(self.learn_queue_size),
+            "FPS": f"{self.framerate:.1f}",
+            "Simulation Time": f"{int(self.total_time)} seconds",
+        }
+
     def generate_training_stats(self):
-        stats = []
+        stats = {}
         for stat_type, stat_info in self.training_record_stats.items():
             if stat_info['record']:
-                stats.append(f"{stat_type}:")
                 for stat_name in stat_info['stat_names']:
                     if stat_name in self.training_stats:
                         values = self.training_stats[stat_name]
                         if values:
                             value = values[-1]
                             formatted_value = f"{value:.3f}" if isinstance(value, float) else value
-                            stats.append(f"  {stat_name}: {formatted_value}")
+                            stats[f"{stat_type} - {stat_name}"] = formatted_value
         return stats
 
     def update(self):
