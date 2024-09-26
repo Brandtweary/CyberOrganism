@@ -1,6 +1,6 @@
 import psutil
 import time
-
+from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetUtilizationRates
 
 class SimulationState:
     def __init__(self, simulation_engine, ui):
@@ -14,6 +14,7 @@ class SimulationState:
         self.cpu_usage = psutil.cpu_percent()
         self.memory_usage = psutil.virtual_memory().percent
         self.available_memory = psutil.virtual_memory().available / (1024 * 1024)
+        self.gpu_usage = 0.0
         self.framerate = 0.0
         self.learn_queue_size = 0
             
@@ -36,6 +37,9 @@ class SimulationState:
         self.frame_count = 0
         self.loading_frames = 60
 
+        nvmlInit()
+        self.gpu_handle = nvmlDeviceGetHandleByIndex(0)
+
     def generate_organism_stats(self):
         stats = []
         for param, value in self.display_parameters.items():
@@ -49,6 +53,7 @@ class SimulationState:
             f"CPU Usage: {self.cpu_usage:.1f}%",
             f"Memory Usage: {self.memory_usage:.1f}%",
             f"Available Memory: {self.available_memory:.1f} MB",
+            f"GPU Usage: {self.gpu_usage:.1f}%",
             f"Learn Queue: {self.learn_queue_size}",
             f"FPS: {self.framerate:.1f}",
             f"Simulation Time: {int(self.total_time)} seconds",
@@ -89,6 +94,10 @@ class SimulationState:
         self.memory_usage = psutil.virtual_memory().percent
         self.available_memory = psutil.virtual_memory().available / (1024 * 1024)
         self.learn_queue_size = self.test_organism.RL_algorithm.learn_queue.qsize()
+        
+        # Update GPU usage
+        utilization = nvmlDeviceGetUtilizationRates(self.gpu_handle)
+        self.gpu_usage = utilization.gpu
 
         # Update training statistics
         self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
@@ -124,7 +133,4 @@ class SimulationState:
     def format_parameter_name(name):
         if name is None:
             return "None"
-        try:
-            return ' '.join(word.capitalize() for word in str(name).split('_'))
-        except AttributeError:
-            return str(name)
+        return ' '.join(word.capitalize() for word in str(name).split('_'))
