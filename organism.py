@@ -54,6 +54,7 @@ class Organism:
         self.marked_for_deletion: bool = False
         self.energy: float = 10.0
         self.nutrition: float = 0.0
+        self.just_spawned: bool = True
       
         # Organismal Parameters
         self.movement_speed: float = 1.0
@@ -269,6 +270,7 @@ class Organism:
 
     def update_state(self, external_state: StateSnapshot) -> Dict[str, Any]:
         """Update the organism's state and return the changes to be applied externally."""
+        self.just_spawned = False
         internal_state = self.get_internal_state(external_state)
         action_index = self.RL_algorithm.select_action(internal_state)
         attention_vector = self.update_attention_point(action_index)
@@ -286,8 +288,8 @@ class Organism:
         self.current_experience = Experience(
             state=internal_state,
             action=action_index,
-            reward=None,  # Will be set in apply_state
-            next_state=None  # Will be set in apply_state
+            reward=None, 
+            next_state=None
         )
         return external_state_change
 
@@ -349,6 +351,8 @@ class Organism:
 
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
         """Apply the new state, calculate rewards, and potentially queue learning."""
+        if self.just_spawned:
+            return  # organism is not in the old state, so the following code would throw an error
         total_reward = self.calculate_rewards(old_state, new_state)
         new_internal_state = self.get_internal_state(new_state)
         

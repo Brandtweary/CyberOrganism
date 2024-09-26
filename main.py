@@ -128,9 +128,6 @@ def run_simulation(sim_state):
         timer_thread.stop()
         timer_thread.wait()  # Wait for the thread to finish
 
-    if not sim_state.ui.should_exit:
-        raise RuntimeError("Simulation ended unexpectedly")
-
 def print_frame_comparison(frames, frame_count):
     if len(frames) < 2:
         print("Not enough data for comparison")

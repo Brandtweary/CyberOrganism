@@ -180,17 +180,23 @@ class StateSnapshot:
         new_y = max(0, min(org_state['y'] + dy, self.sim_engine.world_height - 1))
         
         collision_objects = self.handle_collision(new_x, new_y, organism)
-        if not collision_objects:
+
+        blocking_objects = [
+            obj for obj in collision_objects 
+            if not obj.consumable and 
+            self.get_state(obj.id)['x'] == new_x and 
+            self.get_state(obj.id)['y'] == new_y
+        ]
+        if not blocking_objects:
             org_state['x'] = new_x
             org_state['y'] = new_y
-        else:
-            for obj in collision_objects:
-                # Check if the object is consumable
-                if obj.consumable:
-                    obj.consume(org_state)
-                    item_state = self.get_state(obj.id)
-                    if item_state:
-                        item_state['marked_for_deletion'] = True
+
+        for obj in collision_objects:
+            if obj.consumable:
+                obj.consume(org_state)
+                item_state = self.get_state(obj.id)
+                if item_state:
+                    item_state['marked_for_deletion'] = True
 
     def process_attention_vector(self, org_id: UUID, attention_vector, organism, org_state):
         current_org_x, current_org_y = org_state['x'], org_state['y']
