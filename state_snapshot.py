@@ -16,12 +16,8 @@ class StateSnapshot:
         self.sim_engine = SimulationEngine
 
     def clone_state_snapshot(self) -> 'StateSnapshot':
-        new_snapshot = self.__class__.__new__(self.__class__)
-        for attr, value in self.__dict__.items():
-            if attr == '_state':
-                setattr(new_snapshot, attr, copy.deepcopy(value))
-            else:
-                setattr(new_snapshot, attr, value)
+        new_snapshot = self.__class__(self.sim_engine, self._state['time'], self._state['grid_size'])
+        new_snapshot._state = copy.deepcopy(self._state)
         return new_snapshot
 
     def get_state(self, uuid: UUID) -> Optional[Dict[str, Any]]:
@@ -44,7 +40,7 @@ class StateSnapshot:
         self._state['object_states'][uuid] = state
 
     def update_state(self, uuid: UUID, state: Dict[str, Any]):
-        self._state['object_states'][uuid] = state
+        self._state['object_states'][uuid].update(state)
 
     def remove_state(self, uuid: UUID):
         self._state['object_states'].pop(uuid, None)
@@ -80,8 +76,6 @@ class StateSnapshot:
             value = getattr(instance, param)
             if param not in state or state[param] != value:
                 state[param] = value
-        
-        self.update_state(uuid, state)
 
     def apply_state_params(self, instance: Any, uuid: UUID):
         state = self.get_state(uuid)
@@ -112,12 +106,8 @@ class StateSnapshot:
             instance.synchronized_params.append(param_name)
             instance.param_count += 1
             
-            # Add the new parameter to the state
             value = getattr(instance, param_name)
             state[param_name] = value
-            
-            # Update the state snapshot
-            self.update_state(uuid, state)
         else:
             summary_logger.warning(f"Warning: Parameter '{param_name}' is already synchronized.")
 
