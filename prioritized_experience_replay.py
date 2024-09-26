@@ -3,6 +3,7 @@ from collections import namedtuple, deque
 from typing import List, Tuple
 import random
 import threading
+from summary_logger import summary_logger
 
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state'])
 
@@ -68,7 +69,7 @@ class PrioritizedExperienceReplay:
         self.lock = threading.Lock()
         
         self.recent_buffer = []
-        self.recent_buffer_max_size = 2 * batch_size
+        self.recent_buffer_max_size = 20 * batch_size
 
     def add(self, experience: Experience) -> None:
         with self.lock:
@@ -79,6 +80,7 @@ class PrioritizedExperienceReplay:
             if len(self.recent_buffer) > self.recent_buffer_max_size:
                 oldest_experience = self.recent_buffer.pop(0)
                 self.tree.add(self.max_priority ** self.alpha, oldest_experience)
+                summary_logger.warning("Recent buffer capacity exceeded. Added oldest experience to tree.")
 
     def sample(self) -> Tuple[List[Experience], List[int]]:
         with self.lock:

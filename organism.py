@@ -10,6 +10,7 @@ from RL_algorithm import ReinforcementLearningAlgorithm
 from dqn import DQN
 from threading import Lock
 from collections import defaultdict
+import random
 
 
 class Organism:
@@ -347,7 +348,7 @@ class Organism:
         return reward
 
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
-        """Apply the new state, calculate rewards, and trigger learning."""
+        """Apply the new state, calculate rewards, and potentially queue learning."""
         total_reward = self.calculate_rewards(old_state, new_state)
         new_internal_state = self.get_internal_state(new_state)
         
@@ -362,8 +363,21 @@ class Organism:
         
         self.current_experience = None
         
-        # Queue the learning task instead of starting a new thread
-        self.RL_algorithm.queue_learn(new_state, total_reward)
+        # Calculate the probability of queueing a learn call
+        queue_size = self.RL_algorithm.learn_queue.qsize()
+        max_queue_size = 20 * self.batch_size
+        
+        if queue_size <= 1:
+            queue_probability = 1.0
+        elif queue_size >= max_queue_size:
+            queue_probability = 0.2
+        else:
+            # Linear interpolation between 1.0 and 0.2
+            queue_probability = 1.0 - 0.8 * (queue_size - 1) / (max_queue_size - 1)
+        
+        # Randomly decide whether to queue the learning task
+        if random.random() < queue_probability:
+            self.RL_algorithm.queue_learn(new_state, total_reward)
     
     def record_training_metrics(self, metrics: Dict[str, Any], total_reward: float) -> None:
         """Record and update training metrics including loss, Q-values, and rewards."""

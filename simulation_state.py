@@ -34,7 +34,7 @@ class SimulationState:
         self.ui_update_interval = 0.1
 
         self.frame_count = 0
-        self.loading_frames = 30
+        self.loading_frames = 60
 
     def generate_organism_stats(self):
         stats = []
@@ -94,7 +94,7 @@ class SimulationState:
         self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
         self.training_record_stats = self.test_organism.RL_algorithm.training_stats.record_stats
 
-        # Update UI if we're past the loading frames
+        # Update UI
         if self.frame_count > self.loading_frames - 2:
             self.update_ui()
 

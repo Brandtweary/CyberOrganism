@@ -12,9 +12,13 @@ from collections import deque
 from shared_resources import debug
 import logging
 import traceback
+from summary_logger import summary_logger
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+frame_spike_threshold = 0.025
+profiling = False
 
 def main():
     ui = UI()
@@ -53,16 +57,14 @@ def run_simulation(sim_state):
         nonlocal frame_times, pr, is_profiling, sim_state, last_frames
 
         try:
-            if debug and not is_profiling and sim_state.frame_count > sim_state.loading_frames + 2:
+            if profiling and not is_profiling and sim_state.frame_count > sim_state.loading_frames + 2:
                 is_profiling = True
-                logger.info("Warm-up complete. Starting profiling...")
 
             frame_start = time.time()
             
             if is_profiling:
                 if pr.getstats():
-                    logger.error("Profiler is already enabled when it shouldn't be. This indicates a bug in the previous frame.")
-                    is_profiling = False
+                    logger.error("Profiler is already enabled when it shouldn't be.")
                 else:
                     pr.enable()
 
@@ -81,10 +83,10 @@ def run_simulation(sim_state):
                 last_frames.append((frame_time, s.getvalue(), ps.stats))
 
                 # Print summary and profile info if frame time exceeds threshold
-                if frame_time > 0.030:  # 30ms threshold
+                if frame_time > frame_spike_threshold:  # 30ms threshold
                     logger.info(f"\nSlow frame detected: {frame_time*1000:.2f}ms")
                     logger.info("Comparison with previous frame:")
-                    print_frame_comparison(last_frames)
+                    print_frame_comparison(last_frames, sim_state.frame_count)  # this frame count does not reset every second
 
                 pr.clear()
 
@@ -129,10 +131,7 @@ def run_simulation(sim_state):
     if not sim_state.ui.should_exit:
         raise RuntimeError("Simulation ended unexpectedly")
 
-    # Print final summary or perform any cleanup tasks here
-    print_final_summary(sim_state)
-
-def print_frame_comparison(frames):
+def print_frame_comparison(frames, frame_count):
     if len(frames) < 2:
         print("Not enough data for comparison")
         return
@@ -163,14 +162,27 @@ def print_frame_comparison(frames):
             func_data.append((func_name, prev_calls, prev_time, prev_percent, slow_calls, slow_time, slow_percent, time_diff))
 
     # Sort by slow frame percentage (descending)
-    func_data.sort(key=lambda x: x[6], reverse=True)
+    slow_frame_top = sorted(func_data, key=lambda x: x[6], reverse=True)[:20]
+    
+    # Sort by previous frame percentage (descending)
+    prev_frame_top = sorted(func_data, key=lambda x: x[3], reverse=True)[:20]
 
-    for data in func_data:
+    # Print frame counts
+    print(f"Previous frame count: {frame_count - 1}")
+    print(f"Slow frame count: {frame_count}")
+    print()
+
+    print("Top 20 functions in slow frame:")
+    for data in slow_frame_top:
+        print(f"{data[0]:<50} {data[1]:>10} {data[2]:>10.2f} {data[3]:>7.2f}% {data[4]:>10} {data[5]:>10.2f} {data[6]:>7.2f}% {data[7]:>10.2f}")
+
+    print("\nTop 20 functions in previous frame:")
+    for data in prev_frame_top:
         print(f"{data[0]:<50} {data[1]:>10} {data[2]:>10.2f} {data[3]:>7.2f}% {data[4]:>10} {data[5]:>10.2f} {data[6]:>7.2f}% {data[7]:>10.2f}")
 
     print("=" * 120)
     print(f"Total frame time (ms): {prev_frame[0]*1000:>10.2f} {100:>7.2f}% {slow_frame[0]*1000:>10.2f} {100:>7.2f}% {(slow_frame[0] - prev_frame[0])*1000:>10.2f}")
-    breakpoint()
+    pass # put a breakpoint here
 
 class TimerThread(QThread):
     timeout = Signal()
@@ -224,6 +236,9 @@ def print_final_summary(sim_state):
     print("\n--- Training Statistics ---")
     for stat in sim_state.generate_training_stats():
         print(stat)
+    
+    print("\n=== Logged Messages ===")
+    print(summary_logger.get_summary())
 
 if __name__ == "__main__":
     main()
