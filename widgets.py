@@ -50,6 +50,8 @@ class FoldingStatBlock(QWidget):
 
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(5, 3, 5, 3)  # Reduced top and bottom margins
+        self.content_layout.setSpacing(2)  # Tighter spacing between items
         self.content_widget.hide()
 
         self.layout.addWidget(self.toggle_button)
