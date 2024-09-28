@@ -110,7 +110,7 @@ class UI:
 
         self.setup_stat_section("Organism Statistics", sidebar_layout, "organism_stats")
         self.setup_stat_section("Performance Statistics", sidebar_layout, "performance_stats")
-        self.setup_stat_section("Training Metrics", sidebar_layout, "training_metrics")
+        self.setup_stat_section("Training Statistics", sidebar_layout, "training_stats")
         if debug:
             self.setup_stat_section("Debug Info", sidebar_layout, "debug_info", expanded=False)  # Add this line
 
@@ -155,37 +155,13 @@ class UI:
         self.should_exit = True
         event.accept()
 
-    def update_left_sidebar(self, organism_stats, performance_stats, training_metrics):
+    def update_left_sidebar(self, organism_stats, performance_stats, training_stats):
         if organism_stats is not None:
             self.update_stat_section(organism_stats, "organism_stats")
         if performance_stats is not None:
             self.update_stat_section(performance_stats, "performance_stats")
-        if training_metrics is not None:
-            formatted_training_metrics = self.format_training_metrics(training_metrics)
-            self.update_stat_section(formatted_training_metrics, "training_metrics")
-
-    def format_training_metrics(self, training_metrics):
-        formatted_metrics = {}
-        combined = training_metrics["combined_averages"]
-        
-        # Reward
-        formatted_metrics["Reward"] = f"{training_metrics['reward']['reward_window_avg']:.3f}"
-        
-        # Combined Loss
-        formatted_metrics["Combined Loss"] = f"{combined['loss_window_avg']:.3f}"
-        
-        # Action-specific Losses
-        for action, metrics in training_metrics.items():
-            if action not in ["combined_averages", "reward"]:
-                formatted_metrics[f"{action} Loss"] = f"{metrics['loss_window_avg']:.3f}"
-        
-        # Combined Q-Value
-        formatted_metrics["Combined Q-Value"] = f"{combined['current_q_window_avg']:.3f}"
-        
-        # Combined Expected Q
-        formatted_metrics["Combined Expected Q"] = f"{combined['expected_q_window_avg']:.3f}"
-        
-        return formatted_metrics
+        if training_stats is not None:
+            self.update_stat_section(training_stats, "training_stats")
 
     def update_stat_section(self, stats, section_name):
         layout = getattr(self, f"{section_name}_layout")
@@ -215,29 +191,17 @@ class UI:
         if not debug:
             return
         
-        sim_area_width, sim_area_height = self.sim_area.width(), self.sim_area.height()
         mouse_x, mouse_y = self.sim_area.get_mouse_position()
-        
-        # Get the primary screen
         screen = QGuiApplication.primaryScreen()
-        
-        # Get the device pixel ratio
         device_pixel_ratio = screen.devicePixelRatio()
-        
-        # Get the true screen size
         screen_size = screen.size()
-        
-        # Get the main window geometry
         window_geometry = self.main_window.geometry()
         
         debug_info = {
-            "Sim Area": f"{sim_area_width}x{sim_area_height}",
             "Mouse Position": f"({mouse_x}, {mouse_y})",
             "Device Pixel Ratio": f"{device_pixel_ratio}",
             "Screen Size": f"{screen_size.width()}x{screen_size.height()}",
-            "Window Geometry": f"{window_geometry.width()}x{window_geometry.height()} at ({window_geometry.x()}, {window_geometry.y()})",
-            "Logical DPI": f"{screen.logicalDotsPerInch()}",
-            "Physical DPI": f"{screen.physicalDotsPerInch()}"
+            "Window Geometry": f"{window_geometry.width()}x{window_geometry.height()} at ({window_geometry.x()}, {window_geometry.y()})"
         }
         
         self.update_stat_section(debug_info, "debug_info")

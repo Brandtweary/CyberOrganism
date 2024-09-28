@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 from collections import defaultdict
 
-class TrainingStatistics:
+class NetworkStatistics:
     def __init__(self, model, optimizer):
         self.model = model
         self.optimizer = optimizer

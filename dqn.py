@@ -75,7 +75,9 @@ class DQN(ReinforcementLearningAlgorithm):
         target_network = self.target_network_buffer[1 - self.target_buffer]
 
         self.optimizer.zero_grad()
-        metrics = {self.action_mapping[i].name: {"loss": [], "current_q": [], "expected_q": []} for i in range(self.output_size)}
+        total_loss = 0
+        total_q_value = 0
+        batch_size = len(batch)
         
         for i, experience in enumerate(batch):
             state, action, reward, next_state = experience
@@ -104,9 +106,8 @@ class DQN(ReinforcementLearningAlgorithm):
             
             loss.backward()
             
-            metrics[self.action_mapping[action].name]["loss"].append(loss.item())
-            metrics[self.action_mapping[action].name]["current_q"].append(current_q_value.item())
-            metrics[self.action_mapping[action].name]["expected_q"].append(expected_q_value.item())
+            total_loss += loss.item()
+            total_q_value += current_q_value.item()
 
             td_error = abs(current_q_value.item() - expected_q_value.item())
             self.organism.replay_buffer.update_priorities([idxs[i]], [td_error])
@@ -123,4 +124,7 @@ class DQN(ReinforcementLearningAlgorithm):
                 self.target_network_buffer[self.target_buffer].load_state_dict(learning_network.state_dict())
                 self.target_buffer = 1 - self.target_buffer
 
-        return metrics
+        return {
+            "average_loss": total_loss / batch_size,
+            "average_q_value": total_q_value / batch_size
+        }

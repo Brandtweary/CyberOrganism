@@ -218,8 +218,8 @@ def print_simulation_stats(sim_state):
     print("\n--- Performance Statistics ---")
     for stat in format_stats(sim_state.generate_performance_stats()):
         print(stat)
-    print("\n--- Training Statistics ---")
-    for stat in format_stats(sim_state.generate_training_stats()):
+    print("\n--- Network Statistics ---")
+    for stat in format_stats(sim_state.generate_network_stats()):
         print(stat)
     print("---------------------------------------")
 
@@ -233,8 +233,8 @@ def print_final_summary(sim_state):
         overall_avg_total_frame_time = sum(sim_state.avg_total_frame_times) / len(sim_state.avg_total_frame_times)
         print(f"Overall average frame time: {overall_avg_total_frame_time*1000:.2f}ms")
     
-    print("\n--- Training Statistics ---")
-    for stat in format_stats(sim_state.generate_training_stats()):
+    print("\n--- Network Statistics ---")
+    for stat in format_stats(sim_state.generate_network_stats()):
         print(stat)
     
     print("\n=== Logged Messages ===")

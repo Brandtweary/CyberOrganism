@@ -10,7 +10,6 @@ class SimulationState:
         self.test_organism = simulation_engine.test_organism
         self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
         self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
-        self.training_metrics = self.test_organism.training_metrics
         self.cpu_usage = psutil.cpu_percent()
         self.memory_usage = psutil.virtual_memory().percent
         self.available_memory = psutil.virtual_memory().available / (1024 * 1024)
@@ -23,9 +22,9 @@ class SimulationState:
         self.start_time = time.time()
         self.total_time = 0
 
-        # Add training statistics
-        self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
-        self.training_record_stats = self.test_organism.RL_algorithm.training_stats.record_stats
+        # Add network statistics
+        self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
+        self.network_record_stats = self.test_organism.RL_algorithm.network_stats.record_stats
 
         # Add new attributes for storing average times
         self.avg_total_frame_times = []
@@ -52,25 +51,31 @@ class SimulationState:
         return {
             "CPU Usage": f"{self.cpu_usage:.1f}%",
             "Memory Usage": f"{self.memory_usage:.1f}%",
-            "Available Memory": f"{self.available_memory:.1f} MB",
             "GPU Usage": f"{self.gpu_usage:.1f}%",
             "Learn Queue": str(self.learn_queue_size),
             "FPS": f"{self.framerate:.1f}",
             "Simulation Time": f"{int(self.total_time)} seconds",
         }
 
-    def generate_training_stats(self):
+    def generate_network_stats(self):
         stats = {}
-        for stat_type, stat_info in self.training_record_stats.items():
+        for stat_type, stat_info in self.network_record_stats.items():
             if stat_info['record']:
                 for stat_name in stat_info['stat_names']:
-                    if stat_name in self.training_stats:
-                        values = self.training_stats[stat_name]
+                    if stat_name in self.network_stats:
+                        values = self.network_stats[stat_name]
                         if values:
                             value = values[-1]
                             formatted_value = f"{value:.3f}" if isinstance(value, float) else value
                             stats[f"{stat_type} - {stat_name}"] = formatted_value
         return stats
+    
+    def generate_training_metrics(self):
+        return {
+            "Average Reward": f"{self.test_organism.average_reward:.3f}",
+            "Average Loss": f"{self.test_organism.average_loss:.3f}",
+            "Average Q-Value": f"{self.test_organism.average_q_value:.3f}"
+        }
 
     def update(self):
         self.frame_count += 1
@@ -79,10 +84,9 @@ class SimulationState:
         self.current_state = self.sim_engine.current_state
         self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
         self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
-        self.training_metrics = self.test_organism.training_metrics
         
         # Update summary statistics
-        current_loss = self.training_metrics['combined_averages']['loss_window_avg']
+        current_loss = self.test_organism.average_loss
         if current_loss < 0.5:
             self.time_low_loss += self.sim_engine.UPDATE_INTERVAL
         self.total_time = time.time() - self.start_time
@@ -90,16 +94,13 @@ class SimulationState:
         # Update performance metrics
         self.cpu_usage = psutil.cpu_percent()
         self.memory_usage = psutil.virtual_memory().percent
-        self.available_memory = psutil.virtual_memory().available / (1024 * 1024)
-        self.learn_queue_size = self.test_organism.RL_algorithm.learn_queue.qsize()
-        
-        # Update GPU usage
         utilization = nvmlDeviceGetUtilizationRates(self.gpu_handle)
         self.gpu_usage = utilization.gpu
+        self.learn_queue_size = self.test_organism.RL_algorithm.learn_queue.qsize()        
 
-        # Update training statistics
-        self.training_stats = self.test_organism.RL_algorithm.training_stats.get_stats()
-        self.training_record_stats = self.test_organism.RL_algorithm.training_stats.record_stats
+        # Update network statistics
+        self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
+        self.network_record_stats = self.test_organism.RL_algorithm.network_stats.record_stats
 
         # Update UI
         if self.frame_count > self.loading_frames - 2:
@@ -110,7 +111,8 @@ class SimulationState:
             # First update: update all sections
             organism_stats = self.generate_organism_stats()
             performance_stats = self.generate_performance_stats()
-            self.ui.update_left_sidebar(organism_stats, performance_stats, self.training_metrics)
+            training_metrics = self.generate_training_metrics()
+            self.ui.update_left_sidebar(organism_stats, performance_stats, training_metrics)
             self.last_updated_section = 2  # Set to 2 so next update starts with 0
         else:
             self.ui_update_timer += self.sim_engine.UPDATE_INTERVAL
@@ -125,7 +127,8 @@ class SimulationState:
                     performance_stats = self.generate_performance_stats()
                     self.ui.update_left_sidebar(None, performance_stats, None)
                 else:
-                    self.ui.update_left_sidebar(None, None, self.training_metrics)
+                    training_metrics = self.generate_training_metrics()
+                    self.ui.update_left_sidebar(None, None, training_metrics)
 
     @staticmethod
     def format_parameter_name(name):

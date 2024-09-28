@@ -85,7 +85,12 @@ class Organism:
 
         # Training Metrics
         self.window_size = 100
-        self.training_metrics = self.initialize_training_metrics()
+        self.reward_history = deque(maxlen=self.window_size)
+        self.loss_history = deque(maxlen=self.window_size)
+        self.q_value_history = deque(maxlen=self.window_size)
+        self.average_reward = 0.0
+        self.average_loss = 0.0
+        self.average_q_value = 0.0
 
         # Current Experience (Working) Memory
         self.current_experience: Optional[Experience] = None
@@ -119,28 +124,6 @@ class Organism:
         """Initialize all input parameters to 0.0."""
         for param in self.input_parameters:
             self.__setattr__(param, 0.0)
-    
-    def create_metric_structure(self) -> Dict[str, Any]:
-        return {
-            "loss_history": deque(maxlen=self.window_size),
-            "current_q_history": deque(maxlen=self.window_size),
-            "expected_q_history": deque(maxlen=self.window_size),
-            "loss_window_avg": 0.0,
-            "current_q_window_avg": 0.0,
-            "expected_q_window_avg": 0.0
-        }
-
-    def initialize_training_metrics(self) -> Dict[str, Any]:
-        metrics = {}
-        for action in self.action_mapping.values():
-            metrics[action.name] = self.create_metric_structure()
-        
-        metrics["combined_averages"] = self.create_metric_structure()
-        metrics["reward"] = {
-            "reward_history": deque(maxlen=self.window_size),
-            "reward_window_avg": 0.0
-        }
-        return metrics
 
     def get_internal_state(self, external_state: StateSnapshot) -> torch.Tensor:
         """Compute and return the internal state of the organism."""
@@ -367,7 +350,10 @@ class Organism:
         
         self.current_experience = None
         
-        # Calculate the probability of queueing a learn call
+        self.queue_learn_conditionally(new_state, total_reward)
+
+    def queue_learn_conditionally(self, new_state: StateSnapshot, total_reward: float) -> None:
+        """Conditionally queue a learning task based on the current queue size."""
         queue_size = self.RL_algorithm.learn_queue.qsize()
         max_queue_size = 20 * self.batch_size
         
@@ -385,40 +371,15 @@ class Organism:
     
     def record_training_metrics(self, metrics: Dict[str, Any], total_reward: float) -> None:
         """Record and update training metrics including loss, Q-values, and rewards."""
-        combined_loss = []
-        combined_current_q = []
-        combined_expected_q = []
+        self.reward_history.append(total_reward)
+        self.average_reward = sum(self.reward_history) / len(self.reward_history)
 
-        for action_name, action_metrics in metrics.items():
-            if action_metrics["loss"]:
-                self.training_metrics[action_name]["loss_history"].extend(action_metrics["loss"])
-                self.training_metrics[action_name]["current_q_history"].extend(action_metrics["current_q"])
-                self.training_metrics[action_name]["expected_q_history"].extend(action_metrics["expected_q"])
-                
-                self.training_metrics[action_name]["loss_window_avg"] = sum(self.training_metrics[action_name]["loss_history"]) / len(self.training_metrics[action_name]["loss_history"])
-                self.training_metrics[action_name]["current_q_window_avg"] = sum(self.training_metrics[action_name]["current_q_history"]) / len(self.training_metrics[action_name]["current_q_history"])
-                self.training_metrics[action_name]["expected_q_window_avg"] = sum(self.training_metrics[action_name]["expected_q_history"]) / len(self.training_metrics[action_name]["expected_q_history"])
-
-                combined_loss.extend(action_metrics["loss"])
-                combined_current_q.extend(action_metrics["current_q"])
-                combined_expected_q.extend(action_metrics["expected_q"])
-
-        if combined_loss:
-            avg_loss = sum(combined_loss) / len(combined_loss)
-            avg_current_q = sum(combined_current_q) / len(combined_current_q)
-            avg_expected_q = sum(combined_expected_q) / len(combined_expected_q)
-
-            self.training_metrics["combined_averages"]["loss_history"].append(avg_loss)
-            self.training_metrics["combined_averages"]["current_q_history"].append(avg_current_q)
-            self.training_metrics["combined_averages"]["expected_q_history"].append(avg_expected_q)
-            
-            self.training_metrics["combined_averages"]["loss_window_avg"] = sum(self.training_metrics["combined_averages"]["loss_history"]) / len(self.training_metrics["combined_averages"]["loss_history"])
-            self.training_metrics["combined_averages"]["current_q_window_avg"] = sum(self.training_metrics["combined_averages"]["current_q_history"]) / len(self.training_metrics["combined_averages"]["current_q_history"])
-            self.training_metrics["combined_averages"]["expected_q_window_avg"] = sum(self.training_metrics["combined_averages"]["expected_q_history"]) / len(self.training_metrics["combined_averages"]["expected_q_history"])
-
-        # Record the total reward
-        self.training_metrics["reward"]["reward_history"].append(total_reward)
-        self.training_metrics["reward"]["reward_window_avg"] = sum(self.training_metrics["reward"]["reward_history"]) / len(self.training_metrics["reward"]["reward_history"])
+        if not metrics:
+            return
+        self.loss_history.append(metrics["average_loss"])
+        self.q_value_history.append(metrics["average_q_value"])
+        self.average_loss = sum(self.loss_history) / len(self.loss_history)
+        self.average_q_value = sum(self.q_value_history) / len(self.q_value_history)
 
     def update_metabolism(self) -> Dict[str, Any]:
         """Update the organism's energy and nutrition levels, and check for reproduction."""

@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 from typing import Any, Dict, Tuple
 from enums import Action
-from training_statistics import TrainingStatistics
+from network_statistics import NetworkStatistics
 from state_snapshot import StateSnapshot
 import queue
 import threading
@@ -41,7 +41,7 @@ class ReinforcementLearningAlgorithm(ABC):
         self.main_network_buffer = [self.main_network, copy.deepcopy(self.main_network)]
         self.current_buffer = 0
         self.optimizer = self.create_optimizer()
-        self.training_stats = TrainingStatistics(self.main_network, self.optimizer)
+        self.network_stats = NetworkStatistics(self.main_network, self.optimizer)
 
         self.learn_queue = queue.Queue()
         self.learn_thread = threading.Thread(target=self._learn_worker, daemon=True)
