@@ -112,7 +112,8 @@ class SimulationState:
             organism_stats = self.generate_organism_stats()
             performance_stats = self.generate_performance_stats()
             training_metrics = self.generate_training_metrics()
-            self.ui.update_left_sidebar(organism_stats, performance_stats, training_metrics)
+            action_distribution = self.test_organism.action_distribution
+            self.ui.update_left_sidebar(organism_stats, performance_stats, training_metrics, action_distribution)
             self.last_updated_section = 2  # Set to 2 so next update starts with 0
         else:
             self.ui_update_timer += self.sim_engine.UPDATE_INTERVAL
@@ -122,13 +123,14 @@ class SimulationState:
 
                 if self.last_updated_section == 0:
                     organism_stats = self.generate_organism_stats()
-                    self.ui.update_left_sidebar(organism_stats, None, None)
+                    self.ui.update_left_sidebar(organism_stats, None, None, None)
                 elif self.last_updated_section == 1:
                     performance_stats = self.generate_performance_stats()
-                    self.ui.update_left_sidebar(None, performance_stats, None)
+                    self.ui.update_left_sidebar(None, performance_stats, None, None)
                 else:
                     training_metrics = self.generate_training_metrics()
-                    self.ui.update_left_sidebar(None, None, training_metrics)
+                    action_distribution = self.test_organism.action_distribution
+                    self.ui.update_left_sidebar(None, None, training_metrics, action_distribution)
 
     @staticmethod
     def format_parameter_name(name):

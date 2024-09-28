@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QSize
 from drawing import SimAreaWidget
 import time
 from shared_resources import debug
-from widgets import StatBlock, CollapsibleBox
+from widgets import StatBlock, CollapsibleBox, FoldingStatBlock
 
 
 class UI:
@@ -130,6 +130,10 @@ class UI:
         setattr(self, f"{label_attr_name}_layout", stats_layout)
         setattr(self, f"{label_attr_name}_blocks", {})
         
+        if label_attr_name == "training_stats":
+            self.action_distribution_widget = FoldingStatBlock("Action Distribution", self.left_sidebar)
+            stats_layout.addWidget(self.action_distribution_widget)
+
         stats_box.setContentLayout(stats_layout)
         stats_box.setExpanded(expanded)
 
@@ -155,17 +159,23 @@ class UI:
         self.should_exit = True
         event.accept()
 
-    def update_left_sidebar(self, organism_stats, performance_stats, training_stats):
+    def update_left_sidebar(self, organism_stats, performance_stats, training_stats, action_distribution):
         if organism_stats is not None:
             self.update_stat_section(organism_stats, "organism_stats")
         if performance_stats is not None:
             self.update_stat_section(performance_stats, "performance_stats")
         if training_stats is not None:
             self.update_stat_section(training_stats, "training_stats")
+        if action_distribution is not None:
+            self.action_distribution_widget.update_content(action_distribution)
 
     def update_stat_section(self, stats, section_name):
         layout = getattr(self, f"{section_name}_layout")
         blocks = getattr(self, f"{section_name}_blocks")
+
+        # If it's the training stats section, temporarily remove the action distribution widget
+        if section_name == "training_stats":
+            layout.removeWidget(self.action_distribution_widget)
 
         for name, value in stats.items():
             if name not in blocks:
@@ -186,6 +196,10 @@ class UI:
         # Set all name labels to the maximum width
         for block in blocks.values():
             block.set_name_width(max_width)
+
+        # If it's the training stats section, add the action distribution widget back at the end
+        if section_name == "training_stats":
+            layout.addWidget(self.action_distribution_widget)
 
     def update_debug_info(self):
         if not debug:

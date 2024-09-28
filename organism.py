@@ -91,6 +91,8 @@ class Organism:
         self.average_reward = 0.0
         self.average_loss = 0.0
         self.average_q_value = 0.0
+        self.action_history = deque(maxlen=1000)
+        self.action_distribution: Dict[str, float] = {}
 
         # Current Experience (Working) Memory
         self.current_experience: Optional[Experience] = None
@@ -256,6 +258,7 @@ class Organism:
         self.just_spawned = False
         internal_state = self.get_internal_state(external_state)
         action_index = self.RL_algorithm.select_action(internal_state)
+        self.calculate_action_distribution(action_index)
         attention_vector = self.update_attention_point(action_index)
         movement_vector = self.move(attention_vector)
         
@@ -275,6 +278,23 @@ class Organism:
             next_state=None
         )
         return external_state_change
+    
+    def calculate_action_distribution(self, action_index: int) -> None:
+        """Calculate the action distribution based on the action index."""
+        self.action_history.append(action_index)
+        total_actions = len(self.action_history)
+        if total_actions == 0:
+            return
+
+        action_counts = {action.name: 0 for action in Action}
+        for action_index in self.action_history:
+            action_name = self.action_mapping[action_index].name
+            action_counts[action_name] += 1
+
+        self.action_distribution = {
+            action_name: count / total_actions
+            for action_name, count in action_counts.items()
+        }
 
     def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
         """Calculate the reward based on the old and new states."""
