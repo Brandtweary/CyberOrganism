@@ -16,7 +16,7 @@ class StatBlock(QWidget):
         layout.addWidget(self.value_label)
 
     def update_value(self, value):
-        self.value_label.setText(value)
+        self.value_label.setText(str(value))
     
     def set_name_width(self, width):
         self.name_label.setMinimumWidth(width)

@@ -53,6 +53,8 @@ class SimulationState:
             "Memory Usage": f"{self.memory_usage:.1f}%",
             "GPU Usage": f"{self.gpu_usage:.1f}%",
             "Learn Queue": str(self.learn_queue_size),
+            "Organism Count": str(self.num_organisms),
+            "Item Count": str(self.num_items),
             "FPS": f"{self.framerate:.1f}",
             "Simulation Time": f"{int(self.total_time)} seconds",
         }
@@ -97,6 +99,9 @@ class SimulationState:
         utilization = nvmlDeviceGetUtilizationRates(self.gpu_handle)
         self.gpu_usage = utilization.gpu
         self.learn_queue_size = sum(organism.RL_algorithm.learn_queue.qsize() for organism in self.sim_engine.organisms)
+
+        self.num_organisms = len(self.sim_engine.organisms)
+        self.num_items = len(self.sim_engine.items)
 
         # Update network statistics
         self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
