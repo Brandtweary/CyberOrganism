@@ -69,7 +69,7 @@ class Organism:
         self.energy_consumption: float = 0.002
         self.nutrition_consumption: float = 0.0001
         self.start_nearest_items: int = 1
-        self.max_nearest_items: int = 3
+        self.max_nearest_items: int = 7
         self.nearest_item_params: int = 3  # distance, direction, reward
         self.current_nearest_items: int = self.start_nearest_items
         self.nearest_items_curriculum_period: float = 30 * 60  # 30 minutes in seconds
@@ -87,7 +87,7 @@ class Organism:
         self.gamma: float = 0.9
         self.target_update: int = 100
         self.batch_size: int = 4
-        self.capacity: int = 100000
+        self.capacity: int = 10000
         self.gradient_clip: float = 1.0
         self.epsilon: float = 1.0
         self.epsilon_min: float = 0.01

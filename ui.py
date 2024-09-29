@@ -1,7 +1,7 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
 from PySide6.QtGui import QFont, QColor, QPalette, QCursor, QGuiApplication, QScreen, QPainter, Qt
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from drawing import SimAreaWidget
 import time
 from shared_resources import debug
@@ -30,8 +30,12 @@ class UI:
         self.setup_ui()
 
         # Set up event handlers
-        self.main_window.contextMenuEvent = self.handle_context_menu
         self.main_window.closeEvent = self.handle_close_event
+
+        self.last_right_click_time = 0
+        self.sidebar_toggle_timer = QTimer()
+        self.sidebar_toggle_timer.setSingleShot(True)
+        self.sidebar_toggle_timer.timeout.connect(self.toggle_sidebar)
 
     def setup_ui(self):
         self.setup_main_window()
@@ -139,15 +143,26 @@ class UI:
 
     def setup_key_handlers(self):
         self.main_window.keyPressEvent = self.handle_key_press
+        self.main_window.mousePressEvent = self.handle_mouse_press
 
     def handle_key_press(self, event):
         if event.key() == Qt.Key_Escape:
             self.should_exit = True
             self.main_window.close()
 
-    def handle_context_menu(self, event):
-        if not self.left_sidebar.geometry().contains(event.pos()):
-            self.toggle_sidebar()
+    def handle_mouse_press(self, event):
+        if event.button() == Qt.RightButton:
+            current_time = time.time()
+            if current_time - self.last_right_click_time < 0.2:
+                # Double right-click detected
+                self.sidebar_toggle_timer.stop()  # Cancel pending sidebar toggle
+                self.center_viewport()
+            else:
+                # Single right-click
+                # Schedule sidebar toggle, but wait to see if there's a second click
+                self.sidebar_toggle_timer.start(200)  # 200 ms delay
+            
+            self.last_right_click_time = current_time
 
     def toggle_sidebar(self):
         if self.left_sidebar.isVisible():
@@ -231,3 +246,6 @@ class UI:
 
         self.sim_area.draw_simulation(sim_state)
         self.update_debug_info()
+
+    def center_viewport(self):
+        self.sim_area.center_viewport()

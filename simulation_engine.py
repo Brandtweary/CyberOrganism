@@ -20,6 +20,7 @@ class SimulationEngine:
         self.MAX_FOOD_ITEMS = 32
         self.collision_range = 2 
         self.max_zoomorphs = 20
+        self.deceased_organisms = 0
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE
@@ -196,6 +197,7 @@ class SimulationEngine:
                 self.items.remove(obj)
             elif obj in self.organisms:
                 self.organisms.remove(obj)
+                self.deceased_organisms += 1
         state_snapshot.remove_state(obj_id)
 
     def calculate_distance(self, x1: int, y1: int, x2: int, y2: int, normalize_to_viewport: bool = False) -> float:

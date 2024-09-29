@@ -78,6 +78,12 @@ class SimAreaWidget(QWidget):
         screen_y = viewport_cell_y * self.sim_engine.CELL_SIZE
 
         return int(screen_x), int(screen_y)
+    
+    def center_viewport(self):
+        self.update_viewport(
+            dx=self.sim_engine.world_width // 2 - self.sim_engine.viewport_cell_center_x,
+            dy=self.sim_engine.world_height // 2 - self.sim_engine.viewport_cell_center_y
+        )
 
     def get_mouse_position(self):
         return QCursor.pos().x(), QCursor.pos().y()

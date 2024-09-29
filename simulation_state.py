@@ -16,7 +16,8 @@ class SimulationState:
         self.gpu_usage = 0.0
         self.framerate = 0.0
         self.learn_queue_size = 0
-        
+        self.deceased_organisms = self.sim_engine.deceased_organisms
+
         # Summary statistics
         self.time_low_loss = 0
         self.start_time = time.time()
@@ -54,6 +55,7 @@ class SimulationState:
             "GPU Usage": f"{self.gpu_usage:.1f}%",
             "Learn Queue": str(self.learn_queue_size),
             "Organism Count": str(self.num_organisms),
+            "Deceased Organisms": str(self.deceased_organisms),
             "Item Count": str(self.num_items),
             "FPS": f"{self.framerate:.1f}",
             "Simulation Time": f"{int(self.total_time)} seconds",
@@ -99,6 +101,7 @@ class SimulationState:
         utilization = nvmlDeviceGetUtilizationRates(self.gpu_handle)
         self.gpu_usage = utilization.gpu
         self.learn_queue_size = sum(organism.RL_algorithm.learn_queue.qsize() for organism in self.sim_engine.organisms)
+        self.deceased_organisms = self.sim_engine.deceased_organisms
 
         self.num_organisms = len(self.sim_engine.organisms)
         self.num_items = len(self.sim_engine.items)
