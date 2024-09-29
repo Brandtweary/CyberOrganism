@@ -14,11 +14,12 @@ class SimulationEngine:
         self.ui = ui
         self.sim_area_widget = self.ui.sim_area
         self.sim_area_widget.sim_engine = self
-        self.GRID_SIZE = 7200
+        self.GRID_SIZE = 1000
         self.CELL_SIZE = 10
         self.UPDATE_INTERVAL = 1.0 / ui.FPS
-        self.MAX_FOOD_ITEMS = 12
+        self.MAX_FOOD_ITEMS = 16
         self.collision_range = 2 
+        self.max_zoomorphs = 5
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE
@@ -51,7 +52,7 @@ class SimulationEngine:
             'nutrition': 2.5
         }
 
-        spawn_range = 50
+        spawn_range = 100
         spawn_frequency = 0.5
         entropy = 0.2
 

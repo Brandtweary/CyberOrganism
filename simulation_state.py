@@ -96,7 +96,7 @@ class SimulationState:
         self.memory_usage = psutil.virtual_memory().percent
         utilization = nvmlDeviceGetUtilizationRates(self.gpu_handle)
         self.gpu_usage = utilization.gpu
-        self.learn_queue_size = self.test_organism.RL_algorithm.learn_queue.qsize()        
+        self.learn_queue_size = sum(organism.RL_algorithm.learn_queue.qsize() for organism in self.sim_engine.organisms)
 
         # Update network statistics
         self.network_stats = self.test_organism.RL_algorithm.network_stats.stats

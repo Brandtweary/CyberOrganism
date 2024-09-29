@@ -44,6 +44,9 @@ class Organism:
             'energy',
             'nutrition',
             'epsilon',
+            'proximity_reward_weight',
+            'direction_reward_weight',
+            'focus_reward_weight'
         ]
         
         # Simulation State Parameters
@@ -55,25 +58,29 @@ class Organism:
         self.energy: float = 10.0
         self.nutrition: float = 0.0
         self.just_spawned: bool = True
+        self.frame_skip = 4  # Skip 3 out of 4 frames
+        self.frame_skip_counter = random.randint(0, self.frame_skip - 1)  # Initialize randomly
       
         # Organismal Parameters
         self.movement_speed: float = 1.0
         self.attention_speed: float = 3.0 
-        self.detection_radius: int = 100
-        self.energy_consumption: float = 0.001
+        self.detection_radius: int = 200
+        self.energy_consumption: float = 0.002
         self.nutrition_consumption: float = 0.0001
-        self.max_nearest_items: int = 1
+        self.max_nearest_items: int = 3
         self.nearest_item_params: int = 3  # distance, direction, reward
+        self.proximity_reward_weight: float = 1.0
+        self.direction_reward_weight: float = 1.0
+        self.focus_reward_weight: float = 1.0
 
         # Neural Network Hyperparameters
         self.action_mapping: Dict[int, Action] = {action.value: action for action in Action}
         self.input_size: int = len(self.input_parameters) + self.max_nearest_items * self.nearest_item_params
-        self.hidden_size: int = 16
+        self.hidden_size: int = 64
         self.output_size: int = len(self.action_mapping)
         self.hidden_layers: int = 2
         self.learning_rate: float = 0.001
         self.gamma: float = 0.9
-        self.training_steps: int = 0
         self.target_update: int = 100
         self.batch_size: int = 4
         self.capacity: int = 100000
@@ -256,9 +263,22 @@ class Organism:
     def update_state(self, external_state: StateSnapshot) -> Dict[str, Any]:
         """Update the organism's state and return the changes to be applied externally."""
         self.just_spawned = False
-        internal_state = self.get_internal_state(external_state)
-        action_index = self.RL_algorithm.select_action(internal_state)
+        self.frame_skip_counter = (self.frame_skip_counter + 1) % self.frame_skip
+
+        if self.frame_skip_counter == 0:
+            # Active frame: choose a new action
+            internal_state = self.get_internal_state(external_state)
+            action_index = self.RL_algorithm.select_action(internal_state)
+        else:
+            # Skipped frame: use the last action from history or choose random if history is empty
+            if self.action_history:
+                action_index = self.action_history[-1]
+            else:
+                action_index = random.choice(list(self.action_mapping.keys()))
+
+        # Calculate action distribution for all frames
         self.calculate_action_distribution(action_index)
+
         attention_vector = self.update_attention_point(action_index)
         movement_vector = self.move(attention_vector)
         
@@ -268,15 +288,17 @@ class Organism:
         }
         
         metabolism_changes = self.update_metabolism()
-        
         external_state_change.update(metabolism_changes)
         
-        self.current_experience = Experience(
-            state=internal_state,
-            action=action_index,
-            reward=None, 
-            next_state=None
-        )
+        if self.frame_skip_counter == 0:
+            # Only store experience on active frames
+            self.current_experience = Experience(
+                state=self.get_internal_state(external_state),
+                action=action_index,
+                reward=None, 
+                next_state=None
+            )
+        
         return external_state_change
     
     def calculate_action_distribution(self, action_index: int) -> None:
@@ -327,14 +349,14 @@ class Organism:
                 target_angle = math.atan2(target_delta_y, target_delta_x)
                 angle_diff = math.atan2(math.sin(target_angle - movement_angle), math.cos(target_angle - movement_angle))
                 direction_reward = self.calculate_direction_reward(angle_diff)
-                reward = proximity_reward + direction_reward
+                reward = (proximity_reward * self.proximity_reward_weight) + (direction_reward * self.direction_reward_weight)
                 
                 if new_distance <= 2:
-                    reward += 1.0
+                    reward += (1.0 * self.focus_reward_weight)
                     
                     attention_movement = self.sim_engine.calculate_distance(old_attention_x, old_attention_y, new_attention_x, new_attention_y)
                     if attention_movement < 0.1:
-                        reward += 1.0
+                        reward += (1.0 * self.focus_reward_weight)
             else:
                 nearest_item_id = None
                 reward = -0.666
@@ -343,8 +365,15 @@ class Organism:
         
         reward += self.current_reward
         self.current_reward = 0.0
+
+        self.adjust_reward_weights()
         
         return reward
+    
+    def adjust_reward_weights(self) -> None:
+        self.proximity_reward_weight *= 1 - 1e-4
+        self.direction_reward_weight *= 1 - 1e-5
+        self.focus_reward_weight *= 1 - 1e-6
     
     def calculate_direction_reward(self, angle_diff: float) -> float:
         """Calculate the direction reward based on the angle difference."""
@@ -356,21 +385,24 @@ class Organism:
         """Apply the new state, calculate rewards, and potentially queue learning."""
         if self.just_spawned:
             return  # organism is not in the old state, so the following code would throw an error
-        total_reward = self.calculate_rewards(old_state, new_state)
-        new_internal_state = self.get_internal_state(new_state)
-        
-        if self.current_experience:
-            updated_experience = Experience(
-                state=self.current_experience.state,
-                action=self.current_experience.action,
-                reward=total_reward,
-                next_state=new_internal_state
-            )
-            self.replay_buffer.add(updated_experience)
-        
-        self.current_experience = None
-        
-        self.queue_learn_conditionally(new_state, total_reward)
+
+        if self.frame_skip_counter == 0:
+            # Only process rewards and queue learning on active frames
+            total_reward = self.calculate_rewards(old_state, new_state)
+            new_internal_state = self.get_internal_state(new_state)
+            
+            if self.current_experience:
+                updated_experience = Experience(
+                    state=self.current_experience.state,
+                    action=self.current_experience.action,
+                    reward=total_reward,
+                    next_state=new_internal_state
+                )
+                self.replay_buffer.add(updated_experience)
+            
+            self.current_experience = None
+            
+            self.queue_learn_conditionally(new_state, total_reward)
 
     def queue_learn_conditionally(self, new_state: StateSnapshot, total_reward: float) -> None:
         """Conditionally queue a learning task based on the current queue size."""
@@ -415,9 +447,9 @@ class Organism:
 
     def handle_reproduction(self) -> bool:
         """Check if the organism can reproduce and update its energy and nutrition accordingly."""
-        if self.energy > 100 and self.nutrition > 100:
-            self.energy -= 50
-            self.nutrition -= 30
+        if self.energy > 100 and self.nutrition > 30 and len(self.sim_engine.organisms) < self.sim_engine.max_zoomorphs:
+            self.energy -= 80
+            self.nutrition -= 20
             return True
         return False
 
