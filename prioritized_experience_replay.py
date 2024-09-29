@@ -133,3 +133,7 @@ class PrioritizedExperienceReplay:
     def can_sample(self) -> bool:
         with self.lock:
             return len(self.recent_buffer) >= self.batch_size or self.tree.n_entries >= self.batch_size
+    
+    def get_tree_size(self) -> int:
+        with self.lock:
+            return self.tree.n_entries

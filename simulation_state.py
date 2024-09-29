@@ -16,7 +16,7 @@ class SimulationState:
         self.gpu_usage = 0.0
         self.framerate = 0.0
         self.learn_queue_size = 0
-            
+        
         # Summary statistics
         self.time_low_loss = 0
         self.start_time = time.time()

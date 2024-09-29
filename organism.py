@@ -46,7 +46,8 @@ class Organism:
             'epsilon',
             'proximity_reward_weight',
             'direction_reward_weight',
-            'focus_reward_weight'
+            'focus_reward_weight',
+            'replay_buffer_size'
         ]
         
         # Simulation State Parameters
@@ -67,8 +68,11 @@ class Organism:
         self.detection_radius: int = 200
         self.energy_consumption: float = 0.002
         self.nutrition_consumption: float = 0.0001
+        self.start_nearest_items: int = 1
         self.max_nearest_items: int = 3
         self.nearest_item_params: int = 3  # distance, direction, reward
+        self.current_nearest_items: int = self.start_nearest_items
+        self.nearest_items_curriculum_period: float = 30 * 60  # 30 minutes in seconds
         self.proximity_reward_weight: float = 1.0
         self.direction_reward_weight: float = 1.0
         self.focus_reward_weight: float = 1.0
@@ -79,7 +83,7 @@ class Organism:
         self.hidden_size: int = 64
         self.output_size: int = len(self.action_mapping)
         self.hidden_layers: int = 2
-        self.learning_rate: float = 0.001
+        self.learning_rate: float = 0.005
         self.gamma: float = 0.9
         self.target_update: int = 100
         self.batch_size: int = 4
@@ -109,6 +113,7 @@ class Organism:
         # Long-Term Memory
         self.item_memory: List[UUID] = []
         self.replay_buffer = PrioritizedExperienceReplay(capacity=self.capacity, batch_size=self.batch_size)
+        self.replay_buffer_size: int = 0
 
         # State Snapshot Synchronization Parameters
         self.synchronized_params: List[str] = []
@@ -134,8 +139,19 @@ class Organism:
         for param in self.input_parameters:
             self.__setattr__(param, 0.0)
 
+    def adjust_input_sensors(self, external_state: StateSnapshot) -> None:
+        """Adjust the number of nearest items based on elapsed time."""
+        elapsed_time = external_state.elapsed_time
+        
+        if elapsed_time <= self.nearest_items_curriculum_period:
+            progress = min(elapsed_time / self.nearest_items_curriculum_period, 1.0)
+            self.current_nearest_items = self.start_nearest_items + math.floor(progress * (self.max_nearest_items - self.start_nearest_items))
+        else:
+            self.current_nearest_items = self.max_nearest_items
+
     def get_internal_state(self, external_state: StateSnapshot) -> torch.Tensor:
         """Compute and return the internal state of the organism."""
+        self.adjust_input_sensors(external_state)
         nearest_items_vector = self.calculate_nearest_items_vector(external_state)
         self.calculate_attention_item_parameters(external_state)
         self.calculate_organism_attention_parameters()
@@ -150,7 +166,7 @@ class Organism:
         nearest_items_vector = []
         nearest_item_ids = self.sim_engine.get_nearest_items(
             self.x, self.y, 
-            self.max_nearest_items, 
+            self.current_nearest_items,
             self.detection_radius,
             external_state,
             item_type='food',
@@ -399,7 +415,8 @@ class Organism:
                     next_state=new_internal_state
                 )
                 self.replay_buffer.add(updated_experience)
-            
+                self.replay_buffer_size = self.replay_buffer.get_tree_size()
+
             self.current_experience = None
             
             self.queue_learn_conditionally(new_state, total_reward)

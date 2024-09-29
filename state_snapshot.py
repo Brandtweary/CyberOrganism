@@ -11,7 +11,9 @@ class StateSnapshot:
         self._state = {
             'object_states': {},
             'grid_size': grid_size,
-            'time': current_time
+            'time': current_time,
+            'start_time': current_time,
+            'elapsed_time': 0.0
         }
         self.sim_engine = SimulationEngine
 
@@ -47,6 +49,7 @@ class StateSnapshot:
 
     def update_time(self, new_time: float):
         self._state['time'] = new_time
+        self._state['elapsed_time'] = new_time - self._state['start_time']
 
     def update_grid_size(self, new_grid_size: int):
         self._state['grid_size'] = new_grid_size
@@ -118,6 +121,10 @@ class StateSnapshot:
     @property
     def time(self):
         return self._state['time']
+    
+    @property
+    def elapsed_time(self):
+        return self._state['elapsed_time']
 
     @property
     def object_states(self):

@@ -9,7 +9,7 @@ class StatBlock(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.name_label = QLabel(name)
-        self.value_label = QLabel(value)
+        self.value_label = QLabel(str(value))
         self.name_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.value_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         layout.addWidget(self.name_label)
