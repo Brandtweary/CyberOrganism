@@ -70,7 +70,7 @@ class Organism:
         self.nutrition_consumption: float = 0.0001
         self.start_nearest_items: int = 1
         self.max_nearest_items: int = 7
-        self.nearest_item_params: int = 3  # distance, direction, reward
+        self.nearest_item_params: int = 4  # distance, direction, reward, is_nearest_to_other
         self.current_nearest_items: int = self.start_nearest_items
         self.nearest_items_curriculum_period: float = 30 * 60  # 30 minutes in seconds
         self.proximity_reward_weight: float = 1.0
@@ -84,9 +84,9 @@ class Organism:
         self.output_size: int = len(self.action_mapping)
         self.hidden_layers: int = 2
         self.learning_rate: float = 0.005
-        self.gamma: float = 0.9
+        self.gamma: float = 0.99
         self.target_update: int = 100
-        self.batch_size: int = 4
+        self.batch_size: int = 2
         self.capacity: int = 10000
         self.gradient_clip: float = 1.0
         self.epsilon: float = 1.0
@@ -181,12 +181,21 @@ class Organism:
             if nearest_item_ids:
                 self.nearest_item_ID = nearest_item_ids[0]
 
+        # Get nearest items for other organisms
+        other_organisms_nearest_items = set()
+        for uuid, state in external_state.get_objects_in_snapshot(ObjectType.ORGANISM):
+            if uuid != self.id:
+                nearest_item = state.get('nearest_item_ID')
+                if nearest_item:
+                    other_organisms_nearest_items.add(nearest_item)
+
         for item_id in nearest_item_ids:
             item_state = external_state.get_state(item_id)
             if item_state:
                 distance_org_item = self.sim_engine.calculate_distance(self.x, self.y, item_state['x'], item_state['y'], normalize_to_viewport=True)
                 direction_org_item = self.sim_engine.calculate_angle(self.x, self.y, item_state['x'], item_state['y'], normalize=True)
-                nearest_items_vector.extend([distance_org_item, direction_org_item, item_state['reward']])
+                is_nearest_to_other = 1.0 if item_id in other_organisms_nearest_items else 0.0
+                nearest_items_vector.extend([distance_org_item, direction_org_item, item_state['reward'], is_nearest_to_other])
 
         padding_length = (self.max_nearest_items - len(nearest_item_ids)) * self.nearest_item_params
         nearest_items_vector.extend([0.0] * padding_length)
