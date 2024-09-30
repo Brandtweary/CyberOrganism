@@ -23,15 +23,8 @@ profiling = False
 def main():
     ui = UI()
     simulation_engine = SimulationEngine(ui)
-    
-    initial_x, initial_y = simulation_engine.viewport_cell_center_x, simulation_engine.viewport_cell_center_y
-    test_organism = simulation_engine.create_organism(Organism, (initial_x, initial_y), simulation_engine.current_state)
-    simulation_engine.test_organism = test_organism
-
     sim_state = SimulationState(simulation_engine, ui)
-    
     run_simulation(sim_state)
-    
     print_final_summary(sim_state)
 
 def run_simulation(sim_state):
@@ -67,7 +60,8 @@ def run_simulation(sim_state):
                     logger.error("Profiler is already enabled when it shouldn't be.")
                 else:
                     pr.enable()
-
+            
+            sim_state.ui.app.processEvents()
             sim_state.update()
             sim_state.ui.update(sim_state)
 

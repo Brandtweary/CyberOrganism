@@ -23,11 +23,7 @@ class FoodSpawner(Item):
         base_delay = 1 / self.spawn_frequency
         food_count = len([item for item in self.sim_engine.items if isinstance(item, Food)])
         
-        if food_count <= self.sim_engine.MAX_FOOD_ITEMS / 4:
-            base_delay /= 2
-        
-        if food_count >= self.sim_engine.MAX_FOOD_ITEMS / 8:
-            base_delay /= 2
+        base_delay *= food_count / self.sim_engine.MAX_FOOD_ITEMS
         
         noise = np.random.normal(0, self.entropy * base_delay)
         return max(0.1, base_delay + noise)

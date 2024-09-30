@@ -7,6 +7,7 @@ from collections import deque
 from state_snapshot import StateSnapshot
 from typing import List, Tuple, Optional, Union, Any
 from uuid import UUID
+from organism import Organism
 
 
 class SimulationEngine:
@@ -21,6 +22,7 @@ class SimulationEngine:
         self.collision_range = 2 
         self.max_zoomorphs = 20
         self.deceased_organisms = 0
+        self.starting_organisms = 4
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE
@@ -37,6 +39,7 @@ class SimulationEngine:
 
         self.sim_area_widget.update_viewport_dimensions()
         self.initialize_food_spawners()
+        self.initialize_organisms(self.starting_organisms)
 
     def initialize_food_spawners(self):
         # Center of the viewport in grid coordinates
@@ -67,6 +70,18 @@ class SimulationEngine:
             spawn_range=spawn_range,
             entropy=entropy
         )
+
+    def initialize_organisms(self, num_organisms):
+        center_x = self.viewport_cell_center_x
+        center_y = self.viewport_cell_center_y
+        
+        for i in range(num_organisms):
+            x = random.randint(center_x - 20, center_x + 20)
+            y = random.randint(center_y - 20, center_y + 20)
+            new_organism = self.create_organism(Organism, (x, y), self.current_state)
+            
+            if i == 0:
+                self.test_organism = new_organism
 
     def create_item(self, item_class: type, position: Tuple[int, int], state_snapshot: StateSnapshot, *args, **kwargs) -> Optional[Any]:
         x, y = self.get_nearest_empty_position(position[0], position[1], state_snapshot)

@@ -44,6 +44,7 @@ class Organism:
             'energy',
             'nutrition',
             'epsilon',
+            'current_nearest_items',
             'proximity_reward_weight',
             'direction_reward_weight',
             'focus_reward_weight',
@@ -69,7 +70,7 @@ class Organism:
         self.energy_consumption: float = 0.002
         self.nutrition_consumption: float = 0.0001
         self.start_nearest_items: int = 1
-        self.max_nearest_items: int = 7
+        self.max_nearest_items: int = 5
         self.nearest_item_params: int = 4  # distance, direction, reward, is_nearest_to_other
         self.current_nearest_items: int = self.start_nearest_items
         self.nearest_items_curriculum_period: float = 30 * 60  # 30 minutes in seconds
@@ -83,10 +84,10 @@ class Organism:
         self.hidden_size: int = 64
         self.output_size: int = len(self.action_mapping)
         self.hidden_layers: int = 2
-        self.learning_rate: float = 0.005
-        self.gamma: float = 0.99
+        self.learning_rate: float = 0.001
+        self.gamma: float = 0.9
         self.target_update: int = 100
-        self.batch_size: int = 2
+        self.batch_size: int = 4
         self.capacity: int = 10000
         self.gradient_clip: float = 1.0
         self.epsilon: float = 1.0
