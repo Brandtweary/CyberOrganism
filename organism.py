@@ -81,7 +81,7 @@ class Organism:
         # Neural Network Hyperparameters
         self.action_mapping: Dict[int, Action] = {action.value: action for action in Action}
         self.input_size: int = len(self.input_parameters) + self.max_nearest_items * self.nearest_item_params
-        self.hidden_size: int = 64
+        self.hidden_size: int = 32
         self.output_size: int = len(self.action_mapping)
         self.hidden_layers: int = 2
         self.learning_rate: float = 0.001

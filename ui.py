@@ -244,9 +244,9 @@ class UI:
             self.show_ui_elements()
             self.loaded = True
 
-        self.app.processEvents()
         self.sim_area.draw_simulation(sim_state)
         self.update_debug_info()
+        self.app.processEvents()
 
     def center_viewport(self):
         self.sim_area.center_viewport()

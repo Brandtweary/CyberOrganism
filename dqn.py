@@ -75,46 +75,39 @@ class DQN(ReinforcementLearningAlgorithm):
         target_network = self.target_network_buffer[1 - self.target_buffer]
 
         self.optimizer.zero_grad()
-        total_loss = 0
-        total_q_value = 0
-        batch_size = len(batch)
         
-        for i, experience in enumerate(batch):
-            state, action, reward, next_state = experience
-            
-            state = state.to(self.device)
-            next_state = next_state.to(self.device)
-            reward = torch.tensor(reward, dtype=torch.float32).to(self.device)
+        # Prepare batch data
+        states, actions, rewards, next_states = zip(*batch)
+        states = torch.stack(states).to(self.device)
+        next_states = torch.stack(next_states).to(self.device)
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        actions = torch.tensor(actions, dtype=torch.long).to(self.device)
 
-            # Compute Q-values for current state
-            q_values = learning_network(state)
-            
-            # Get Q-value for the taken action
-            current_q_value = q_values[action]
+        # Compute Q-values for current states
+        q_values = learning_network(states)
+        current_q_values = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
 
-            with torch.no_grad():
-                # Compute Q-values for next state
-                next_q_values = target_network(next_state)
-                # Get maximum Q-value for next state
-                next_q_value = next_q_values.max()
+        with torch.no_grad():
+            # Compute Q-values for next states
+            next_q_values = target_network(next_states)
+            # Get maximum Q-value for next states
+            max_next_q_values = next_q_values.max(1)[0]
 
-            # Compute expected Q-value
-            expected_q_value = reward + (gamma * next_q_value)
+        # Compute expected Q-values
+        expected_q_values = rewards + (gamma * max_next_q_values)
 
-            # Compute loss
-            loss = F.smooth_l1_loss(current_q_value.unsqueeze(0), expected_q_value.unsqueeze(0))
-            
-            loss.backward()
-            
-            total_loss += loss.item()
-            total_q_value += current_q_value.item()
-
-            td_error = abs(current_q_value.item() - expected_q_value.item())
-            self.organism.replay_buffer.update_priorities([idxs[i]], [td_error])
-
+        # Compute loss
+        loss = F.smooth_l1_loss(current_q_values, expected_q_values)
+        
+        loss.backward()
+        
         torch.nn.utils.clip_grad_norm_(learning_network.parameters(), max_norm=gradient_clip)
         
         self.optimizer.step()
+
+        # Update priorities in replay buffer
+        td_errors = abs(current_q_values.detach() - expected_q_values).tolist()
+        self.organism.replay_buffer.update_priorities(idxs, td_errors)
 
         with self.network_lock:
             self.main_network_buffer[self.current_buffer].load_state_dict(learning_network.state_dict())
@@ -125,6 +118,6 @@ class DQN(ReinforcementLearningAlgorithm):
                 self.target_buffer = 1 - self.target_buffer
 
         return {
-            "average_loss": total_loss / batch_size,
-            "average_q_value": total_q_value / batch_size
+            "average_loss": loss.item(),
+            "average_q_value": current_q_values.mean().item()
         }
