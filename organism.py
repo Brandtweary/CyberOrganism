@@ -84,9 +84,9 @@ class Organism:
         self.hidden_size: int = 64
         self.output_size: int = len(self.action_mapping)
         self.hidden_layers: int = 2
-        self.learning_rate: float = 0.002
-        self.gamma: float = 0.95
-        self.target_update: int = 200
+        self.learning_rate: float = 0.001
+        self.gamma: float = 0.9
+        self.target_update: int = 100
         self.batch_size: int = 4
         self.capacity: int = 10000
         self.gradient_clip: float = 1.0

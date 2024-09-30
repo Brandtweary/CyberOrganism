@@ -61,7 +61,6 @@ def run_simulation(sim_state):
                 else:
                     pr.enable()
             
-            sim_state.ui.app.processEvents()
             sim_state.update()
             sim_state.ui.update(sim_state)
 
