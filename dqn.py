@@ -64,7 +64,8 @@ class DQN(ReinforcementLearningAlgorithm):
         self.reward_history = deque(maxlen=100)
         self.loss_history = deque(maxlen=100)
         self.q_value_history = deque(maxlen=100)
-        
+        self.target_update_counter = 0
+        self.inference_update_counter = 0
 
     def create_network(self) -> nn.Module:
         return DQNNetwork(self.input_size, self.hidden_size, self.output_size, self.hidden_layers)
@@ -111,7 +112,7 @@ class DQN(ReinforcementLearningAlgorithm):
     
     def get_learning_backlog(self):
         return self.learning_backlog.value
-    
+
     def _process_output_queue(self):
         while True:
             try:
@@ -141,9 +142,14 @@ class DQN(ReinforcementLearningAlgorithm):
         avg_loss = sum(self.loss_history) / len(self.loss_history)
         avg_q_value = sum(self.q_value_history) / len(self.q_value_history)
 
+        self.target_update_counter += metrics['target_update_counter']
+        self.inference_update_counter += metrics['inference_update_counter']
+
         self.organism.add_param_diff('average_reward', avg_reward)
         self.organism.add_param_diff('average_loss', avg_loss)
         self.organism.add_param_diff('average_q_value', avg_q_value)
+        self.organism.add_param_diff('target_update_counter', self.target_update_counter)
+        self.organism.add_param_diff('inference_update_counter', self.inference_update_counter)
 
     def update_inference_network(self, weights: Dict[str, torch.Tensor]):
         new_inference_network = self.inference_buffer[1 - self.current_inference_buffer]
@@ -168,65 +174,3 @@ class DQN(ReinforcementLearningAlgorithm):
     
     def _learn(self, organism_state: Dict[str, Any], experiences: Any):
         pass  # dummy implementation
-
-    # def _learn(self, organism_state: Dict[str, Any], experiences: Any) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], Dict[int, float]]:
-    #     # Unpack parameters from organism_state
-    #     gamma = organism_state['gamma']
-    #     gradient_clip = organism_state['gradient_clip']
-    #     target_update = organism_state['target_update']
-    #     inference_update = organism_state['inference_update']
-
-    #     # Unpack experiences
-    #     batch, idxs = experiences
-
-    #     # Prepare batch data
-    #     states, actions, rewards, next_states = zip(*batch)
-    #     states = torch.stack(states).to(self.device)
-    #     next_states = torch.stack(next_states).to(self.device)
-    #     rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
-    #     actions = torch.tensor(actions, dtype=torch.long).to(self.device)
-
-    #     # Compute Q-values for current states
-    #     q_values = self.main_network(states)
-    #     current_q_values = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
-
-    #     with torch.no_grad():
-    #         # Compute Q-values for next states
-    #         next_q_values = self.target_network(next_states)
-    #         # Get maximum Q-value for next states
-    #         max_next_q_values = next_q_values.max(1)[0]
-
-    #     # Compute expected Q-values
-    #     expected_q_values = rewards + (gamma * max_next_q_values)
-
-    #     # Compute loss
-    #     loss = F.smooth_l1_loss(current_q_values, expected_q_values)
-
-    #     # Optimize the model
-    #     self.optimizer.zero_grad()
-    #     loss.backward()
-    #     torch.nn.utils.clip_grad_norm_(self.main_network.parameters(), max_norm=gradient_clip)
-    #     self.optimizer.step()
-
-    #     # Calculate TD errors
-    #     with torch.no_grad():
-    #         td_errors = abs(current_q_values - expected_q_values)
-    #     td_errors_dict = {idx: error.item() for idx, error in zip(idxs, td_errors)}
-
-    #     # Update target network if needed
-    #     self.training_steps += 1
-    #     if self.training_steps % target_update == 0:
-    #         self.target_network.load_state_dict(self.main_network.state_dict())
-
-    #     # Check if inference network update is due
-    #     weights = None
-    #     if self.training_steps % inference_update == 0:
-    #         weights = self.main_network.state_dict()
-        
-    #     # Prepare metrics
-    #     metrics = {
-    #         "average_loss": loss.item(),
-    #         "average_q_value": current_q_values.mean().item()
-    #     }
-
-    #     return metrics, weights, td_errors_dict

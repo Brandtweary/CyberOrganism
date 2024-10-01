@@ -79,18 +79,24 @@ class LearningProcess:
 
         # Update target network if needed
         self.training_steps += 1
+        target_update_counter = 0
+        inference_update_counter = 0
         if self.training_steps % target_update == 0:
             self.target_network.load_state_dict(self.main_network.state_dict())
+            target_update_counter += 1
 
         # Check if inference network update is due
         weights = None
         if self.training_steps % inference_update == 0:
             weights = {k: v.cpu().detach().clone() for k, v in self.main_network.state_dict().items()}
-        
+            inference_update_counter += 1
+
         # Prepare metrics
         metrics = {
             "average_loss": loss.item(),
-            "average_q_value": current_q_values.mean().item()
+            "average_q_value": current_q_values.mean().item(),
+            "target_update_counter": target_update_counter,
+            "inference_update_counter": inference_update_counter
         }
 
         return metrics, weights, td_errors_dict

@@ -49,7 +49,9 @@ class Organism:
             'proximity_reward_weight',
             'direction_reward_weight',
             'focus_reward_weight',
-            'replay_buffer_size'
+            'replay_buffer_size',
+            'target_update_counter',
+            'inference_update_counter'
         ]
         
         # Simulation State Parameters
@@ -78,6 +80,8 @@ class Organism:
         self.proximity_reward_weight: float = 2.0
         self.direction_reward_weight: float = 1.0
         self.focus_reward_weight: float = 1.0
+        self.target_update_counter: int = 0
+        self.inference_update_counter: int = 0
 
         # Neural Network Hyperparameters
         self.action_mapping: Dict[int, Action] = {action.value: action for action in Action}

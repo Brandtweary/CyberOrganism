@@ -206,6 +206,8 @@ class StateSnapshot:
                 self.process_state_change_dict(obj_id, change_dict, obj, self.get_state(obj_id))
 
     def batch_state_preparation(self, objects):
+
+        # Get nearest items for organisms
         organisms = [obj for obj in objects if obj.type == ObjectType.ORGANISM]
         for organism in organisms:
             org_state = self.get_state(organism.id)
