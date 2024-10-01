@@ -218,19 +218,19 @@ class SimulationEngine:
         
         def item_distance(item):
             item_state = state_snapshot.get_state(item.id)
-            return self.calculate_distance(x, y, item_state['x'], item_state['y']), item
+            return self.calculate_distance(x, y, item_state['x'], item_state['y'])
 
         nearest_items = []
         for item in self.items:
             if isinstance(item, item_class):
-                distance, _ = item_distance(item)
+                distance = item_distance(item)
                 if distance <= detection_radius:
                     if len(nearest_items) < num_items:
-                        heapq.heappush(nearest_items, (-distance, item))
+                        heapq.heappush(nearest_items, (-distance, id(item), item))
                     else:
-                        heapq.heappushpop(nearest_items, (-distance, item))
+                        heapq.heappushpop(nearest_items, (-distance, id(item), item))
 
-        sorted_items = [item for _, item in sorted(nearest_items, key=lambda x: -x[0])]
+        sorted_items = [item for _, _, item in sorted(nearest_items)]
         
         return [item.id for item in sorted_items] if return_IDs else sorted_items
     
