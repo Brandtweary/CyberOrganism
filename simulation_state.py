@@ -1,6 +1,8 @@
 import psutil
 import time
 from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetUtilizationRates
+from concurrent.futures import ThreadPoolExecutor
+from custom_profiler import profiler
 
 class SimulationState:
     def __init__(self, simulation_engine, ui):
@@ -15,8 +17,8 @@ class SimulationState:
         self.available_memory = psutil.virtual_memory().available / (1024 * 1024)
         self.gpu_usage = 0.0
         self.framerate = 0.0
-        self.learn_queue_size = 0
         self.deceased_organisms = self.sim_engine.deceased_organisms
+        self.learning_backlog = 0
 
         # Summary statistics
         self.time_low_loss = 0
@@ -40,6 +42,7 @@ class SimulationState:
         nvmlInit()
         self.gpu_handle = nvmlDeviceGetHandleByIndex(0)
 
+
     def generate_organism_stats(self):
         stats = {}
         for param, value in self.display_parameters.items():
@@ -53,12 +56,12 @@ class SimulationState:
             "CPU Usage": f"{self.cpu_usage:.1f}%",
             "Memory Usage": f"{self.memory_usage:.1f}%",
             "GPU Usage": f"{self.gpu_usage:.1f}%",
-            "Learn Queue": str(self.learn_queue_size),
             "Organism Count": str(self.num_organisms),
             "Deceased Organisms": str(self.deceased_organisms),
             "Item Count": str(self.num_items),
+            "Learning Backlog": str(self.learning_backlog),
             "FPS": f"{self.framerate:.1f}",
-            "Simulation Time": f"{int(self.total_time)} seconds",
+            "Simulation Time": f"{int(self.total_time)} seconds"
         }
 
     def generate_network_stats(self):
@@ -81,6 +84,7 @@ class SimulationState:
             "Average Q-Value": f"{self.test_organism.average_q_value:.3f}"
         }
 
+    @profiler.profile("update_simulation_state")
     def update(self):
         self.frame_count += 1
         
@@ -100,11 +104,10 @@ class SimulationState:
         self.memory_usage = psutil.virtual_memory().percent
         utilization = nvmlDeviceGetUtilizationRates(self.gpu_handle)
         self.gpu_usage = utilization.gpu
-        self.learn_queue_size = sum(organism.RL_algorithm.learn_queue.qsize() for organism in self.sim_engine.organisms)
         self.deceased_organisms = self.sim_engine.deceased_organisms
-
         self.num_organisms = len(self.sim_engine.organisms)
         self.num_items = len(self.sim_engine.items)
+        self.learning_backlog = sum(organism.RL_algorithm.get_learning_backlog() for organism in self.sim_engine.organisms)
 
         # Update network statistics
         self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
@@ -113,7 +116,7 @@ class SimulationState:
         # Update UI
         if self.frame_count > self.loading_frames - 2:
             self.update_ui()
-
+ 
     def update_ui(self):
         if self.last_updated_section == -1:
             # First update: update all sections

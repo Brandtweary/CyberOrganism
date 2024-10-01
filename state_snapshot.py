@@ -4,21 +4,27 @@ import math
 import copy
 from enums import ObjectType
 from summary_logger import summary_logger
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from custom_profiler import profiler
 
 
 class StateSnapshot:
-    def __init__(self, SimulationEngine, current_time: float, grid_size: int):
+    def __init__(self, SimulationEngine, start_time: float, grid_size: int):
         self._state = {
             'object_states': {},
             'grid_size': grid_size,
-            'time': current_time,
-            'start_time': current_time,
+            'time': start_time,
+            'start_time': start_time,
             'elapsed_time': 0.0
         }
         self.sim_engine = SimulationEngine
+        self.use_threading = False
+        if self.use_threading:
+            self.thread_pool = ThreadPoolExecutor(max_workers=64)
 
+    @profiler.profile("clone_state_snapshot")
     def clone_state_snapshot(self) -> 'StateSnapshot':
-        new_snapshot = self.__class__(self.sim_engine, self._state['time'], self._state['grid_size'])
+        new_snapshot = self.__class__(self.sim_engine, self._state['start_time'], self._state['grid_size'])
         new_snapshot._state = copy.deepcopy(self._state)
         return new_snapshot
 
@@ -135,39 +141,83 @@ class StateSnapshot:
             if hasattr(obj, 'get_and_clear_param_diffs'):
                 diffs = obj.get_and_clear_param_diffs()
                 for param_name, diff_list in diffs.items():
-                    current_value = getattr(obj, param_name)
-                    for diff in diff_list:
-                        if isinstance(diff, (int, float)):
-                            current_value += diff
-                        elif callable(diff):
-                            current_value = diff(current_value)
+                    if len(diff_list) == 1:
+                        setattr(obj, param_name, diff_list[0])
+                    else:
+                        original_value = getattr(obj, param_name)
+                        if isinstance(original_value, (int, float)):
+                            total_diff = sum(diff - original_value for diff in diff_list if isinstance(diff, (int, float)))
+                            new_value = original_value + total_diff
                         else:
-                            current_value = diff
-                    setattr(obj, param_name, current_value)
+                            new_value = diff_list[-1]
+                        setattr(obj, param_name, new_value)
 
     def update_snapshot_with_objects(self, objects: List[Any]):
-        '''
-        This method calculates the projected state changes for all objects, then synchronizes the state snapshot withinstance params, and then the state changes are processed.
-        Instance params and state dicts are synchronized as long as all modifications are isolated to the update_simulation loop in simulation_engine.
-        Changes must occur during update_state, state change dict processing, or apply_state in particular. 
-        If either the instance params or state dict are modified outside of this loop, then please at least ensure you apply the modification to both using update_state_params and apply_state_params.
-        '''
-        for obj in objects:
-            if self.get_state(obj.id) is None:
-                raise KeyError(f"No state found for object: {obj.id}")
-        
+        if self.use_threading:
+            self._update_snapshot_with_objects_threaded(objects)
+        else:
+            self._update_snapshot_with_objects_sequential(objects)
+
+    @profiler.profile("_update_snapshot_with_objects_threaded")
+    def _update_snapshot_with_objects_threaded(self, objects):  
         self.synchronize_param_diffs(objects)
+        self.batch_state_preparation(objects)
 
-        state_changes = {}  # for this to work correctly, do not modify state dicts or instance params outside of the update simulation loop
-        for obj in objects:
-            state_changes[obj.id] = obj.update_state(self)
+        future_to_obj = {
+            self.thread_pool.submit(obj.update_state, self): obj 
+            for obj in objects
+        }
+        state_changes = {}
+        for future in as_completed(future_to_obj):
+            obj = future_to_obj[future]
+            try:
+                state_changes[obj.id] = future.result()
+            except Exception as exc:
+                summary_logger.error(f"Object {obj.id} generated an exception: {exc}")
 
-        for obj in objects:
-            self.update_state_params(obj, obj.id)
+        with profiler.profile_section("_update_snapshot_with_objects_threaded", "post_processing"):
+            for obj in objects:
+                self.update_state_params(obj, obj.id)
 
-        for obj_id, change_dict in state_changes.items():
-            obj = next(o for o in objects if o.id == obj_id)
-            self.process_state_change_dict(obj_id, change_dict, obj, self.get_state(obj_id))
+            for obj_id, change_dict in state_changes.items():
+                obj = next(o for o in objects if o.id == obj_id)
+                self.process_state_change_dict(obj_id, change_dict, obj, self.get_state(obj_id))
+
+    @profiler.profile("_update_snapshot_with_objects_sequential")
+    def _update_snapshot_with_objects_sequential(self, objects):
+        with profiler.profile_section("_update_snapshot_with_objects_sequential", "synchronize_param_diffs"):
+            self.synchronize_param_diffs(objects)
+
+        with profiler.profile_section("_update_snapshot_with_objects_sequential", "batch_state_preparation"):
+            self.batch_state_preparation(objects)
+
+        with profiler.profile_section("_update_snapshot_with_objects_sequential", "update_states"): 
+            state_changes = {}
+            for obj in objects:
+                state_changes[obj.id] = obj.update_state(self)
+
+        with profiler.profile_section("_update_snapshot_with_objects_sequential", "update_params"):
+            for obj in objects:
+                self.update_state_params(obj, obj.id)
+
+        with profiler.profile_section("_update_snapshot_with_objects_sequential", "process_state_changes"):
+            for obj_id, change_dict in state_changes.items():
+                obj = next(o for o in objects if o.id == obj_id)
+                self.process_state_change_dict(obj_id, change_dict, obj, self.get_state(obj_id))
+
+    def batch_state_preparation(self, objects):
+        organisms = [obj for obj in objects if obj.type == ObjectType.ORGANISM]
+        for organism in organisms:
+            org_state = self.get_state(organism.id)
+            nearest_item_ids = self.sim_engine.get_nearest_items(
+                org_state['x'], org_state['y'], 
+                organism.current_nearest_items,
+                organism.detection_radius,
+                self,
+                item_type='food',
+                return_IDs=True
+            )
+            organism.nearest_item_ids = nearest_item_ids
 
     def process_state_change_dict(self, obj_id: UUID, change_dict: Dict[str, Any], obj: Any, obj_state: Dict[str, Any]):
         for key, value in change_dict.items():

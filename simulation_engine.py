@@ -8,6 +8,10 @@ from state_snapshot import StateSnapshot
 from typing import List, Tuple, Optional, Union, Any
 from uuid import UUID
 from organism import Organism
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from summary_logger import summary_logger
+from custom_profiler import profiler
+import heapq
 
 
 class SimulationEngine:
@@ -22,7 +26,7 @@ class SimulationEngine:
         self.collision_range = 2 
         self.max_zoomorphs = 20
         self.deceased_organisms = 0
-        self.starting_organisms = 4
+        self.starting_organisms = 8
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE
@@ -32,10 +36,12 @@ class SimulationEngine:
         self.viewport_cell_center_y = self.world_height // 2
         
         self.state_history = deque(maxlen=100)
-        self.current_state = StateSnapshot(self, current_time=time.time(), grid_size=self.GRID_SIZE)
+        self.current_state = StateSnapshot(self, start_time=time.time(), grid_size=self.GRID_SIZE)
         self.items = []
         self.organisms = []
         self.test_organism = None
+        self.use_threading = False
+        self.thread_pool = ThreadPoolExecutor(max_workers=64) if self.use_threading else None
 
         self.sim_area_widget.update_viewport_dimensions()
         self.initialize_food_spawners()
@@ -138,15 +144,28 @@ class SimulationEngine:
         # If no empty cell found, return None or raise an exception
         raise ValueError("No empty cell found in the entire grid")
 
+    @profiler.profile("update_simulation")
     def update_simulation(self) -> None:
-        new_state: StateSnapshot = self.current_state.clone_state_snapshot()
-        new_state.update_time(time.time())
-        self.update_all_objects(new_state)
-        self.apply_simulation_state(self.current_state, new_state)
-        self.state_history.append(self.current_state)
-        self.current_state = new_state
+        with profiler.profile_section("update_simulation", "clone_state_snapshot"):
+            new_state: StateSnapshot = self.current_state.clone_state_snapshot()
+            new_state.update_time(time.time())
+        with profiler.profile_section("update_simulation", "update_all_objects"):
+            self.update_all_objects(new_state)
+        with profiler.profile_section("update_simulation", "apply_simulation_state"):
+            self.apply_simulation_state(self.current_state, new_state)
+            self.state_history.append(self.current_state)
+            self.current_state = new_state
 
     def apply_simulation_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
+        if self.use_threading:
+            self._apply_simulation_state_threaded(old_state, new_state)
+        else:
+            self._apply_simulation_state_sequential(old_state, new_state)
+
+    
+    @profiler.profile("_apply_simulation_state_threaded")
+    def _apply_simulation_state_threaded(self, old_state, new_state):
+        future_to_obj = {}
         for obj_id, obj_state in new_state.get_objects_in_snapshot():
             if obj_state.get('marked_for_deletion', False):
                 self.remove_object(obj_id, new_state)
@@ -154,8 +173,28 @@ class SimulationEngine:
                 obj = self.get_object_by_ID(obj_id)
                 if obj:
                     new_state.apply_state_params(obj, obj_id)
-                    obj.apply_state(old_state, new_state)
-                    new_state.update_state_params(obj, obj_id) # in case any instance params change during apply_state
+                    future_to_obj[self.thread_pool.submit(self._apply_state_to_object, obj, old_state, new_state)] = obj
+
+        for future in as_completed(future_to_obj):
+            obj = future_to_obj[future]
+            try:
+                future.result()
+            except Exception as exc:
+                summary_logger.error(f"Object {obj.id} generated an exception: {exc}")
+
+    @profiler.profile("_apply_simulation_state_sequential")
+    def _apply_simulation_state_sequential(self, old_state, new_state):
+        for obj_id, obj_state in new_state.get_objects_in_snapshot():
+            if obj_state.get('marked_for_deletion', False):
+                self.remove_object(obj_id, new_state)
+            else:
+                obj = self.get_object_by_ID(obj_id)
+                if obj:
+                    new_state.apply_state_params(obj, obj_id)
+                    self._apply_state_to_object(obj, old_state, new_state)
+
+    def _apply_state_to_object(self, obj, old_state, new_state):
+        obj.apply_state(old_state, new_state)
 
     def update_all_objects(self, new_state: StateSnapshot) -> None:
         all_objects = self.organisms + self.items
@@ -177,12 +216,21 @@ class SimulationEngine:
     def get_nearest_items(self, x: int, y: int, num_items: int, detection_radius: float, state_snapshot: StateSnapshot, item_type: Optional[str] = None, return_IDs: bool = False) -> Union[List[UUID], List[Any]]:
         item_class = Item if item_type is None else get_item_class(item_type)
         
-        sorted_items = sorted(
-            [item for item in self.items 
-             if isinstance(item, item_class) and 
-             self.calculate_distance(x, y, state_snapshot.get_state(item.id)['x'], state_snapshot.get_state(item.id)['y']) <= detection_radius],
-            key=lambda item: self.calculate_distance(x, y, state_snapshot.get_state(item.id)['x'], state_snapshot.get_state(item.id)['y'])
-        )[:num_items]
+        def item_distance(item):
+            item_state = state_snapshot.get_state(item.id)
+            return self.calculate_distance(x, y, item_state['x'], item_state['y']), item
+
+        nearest_items = []
+        for item in self.items:
+            if isinstance(item, item_class):
+                distance, _ = item_distance(item)
+                if distance <= detection_radius:
+                    if len(nearest_items) < num_items:
+                        heapq.heappush(nearest_items, (-distance, item))
+                    else:
+                        heapq.heappushpop(nearest_items, (-distance, item))
+
+        sorted_items = [item for _, item in sorted(nearest_items, key=lambda x: -x[0])]
         
         return [item.id for item in sorted_items] if return_IDs else sorted_items
     
@@ -211,6 +259,7 @@ class SimulationEngine:
             if obj in self.items:
                 self.items.remove(obj)
             elif obj in self.organisms:
+                obj.RL_algorithm.cleanup()
                 self.organisms.remove(obj)
                 self.deceased_organisms += 1
         state_snapshot.remove_state(obj_id)
@@ -233,3 +282,7 @@ class SimulationEngine:
             return normalized_angle
         
         return angle
+    
+    def cleanup_processes(self):
+        for organism in self.organisms:
+            organism.RL_algorithm.cleanup()

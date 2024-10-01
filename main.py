@@ -10,15 +10,9 @@ import io
 import os
 from collections import deque
 from shared_resources import debug
-import logging
-import traceback
 from summary_logger import summary_logger
+from custom_profiler import profiler
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
-frame_spike_threshold = 0.025
-profiling = False
 
 def main():
     ui = UI()
@@ -37,61 +31,31 @@ def run_simulation(sim_state):
     last_fps_calc_time = time.time()
     start_time = time.time()
 
-    # Create a Profile object
-    pr = cProfile.Profile()
-    is_profiling = False
-
-    # Create a deque to store the last two frames' profiling data
-    last_frames = deque(maxlen=2)
-
+    @profiler.profile("simulation_step")
     @Slot()
     def simulation_step():
         nonlocal last_print_time, frame_count, last_fps_calc_time, start_time
-        nonlocal frame_times, pr, is_profiling, sim_state, last_frames
+        nonlocal frame_times, sim_state
 
-        try:
-            if profiling and not is_profiling and sim_state.frame_count > sim_state.loading_frames + 2:
-                is_profiling = True
-
-            frame_start = time.time()
-            
-            if is_profiling:
-                if pr.getstats():
-                    logger.error("Profiler is already enabled when it shouldn't be.")
-                else:
-                    pr.enable()
-            
+        frame_start = time.time()
+  
+        #with profiler.profile_section("simulation_step", "processEvents"):
+           # sim_state.ui.app.processEvents()  # add this to tighten UI when frame time reaches budget (~33ms)
+        with profiler.profile_section("simulation_step", "sim_state_update"):
             sim_state.update()
+        with profiler.profile_section("simulation_step", "ui_update"):
             sim_state.ui.update(sim_state)
 
-            frame_time = time.time() - frame_start
-            frame_times.append(frame_time)
+        frame_time = time.time() - frame_start
+        frame_times.append(frame_time)
+        frame_count += 1
+        current_time = time.time()
 
-            if is_profiling:
-                pr.disable()
-                
-                # Store the profiling data for this frame
-                s = io.StringIO()
-                ps = pstats.Stats(pr, stream=s).sort_stats('cumulative')
-                last_frames.append((frame_time, s.getvalue(), ps.stats))
-
-                # Print summary and profile info if frame time exceeds threshold
-                if frame_time > frame_spike_threshold:  # 30ms threshold
-                    logger.info(f"\nSlow frame detected: {frame_time*1000:.2f}ms")
-                    logger.info("Comparison with previous frame:")
-                    print_frame_comparison(last_frames, sim_state.frame_count)  # this frame count does not reset every second
-
-                pr.clear()
-
-            frame_count += 1
-
-            current_time = time.time()
-
-            # Calculate FPS every second
-            if current_time - last_fps_calc_time >= 1.0:
-                sim_state.framerate = frame_count / (current_time - last_fps_calc_time)
-                frame_count = 0
-                last_fps_calc_time = current_time
+        # Calculate FPS every second
+        if current_time - last_fps_calc_time >= 1.0:
+            sim_state.framerate = frame_count / (current_time - last_fps_calc_time)
+            frame_count = 0
+            last_fps_calc_time = current_time
 
             # Regular summary every 10 seconds
             if current_time - last_print_time >= 10.0:
@@ -101,14 +65,9 @@ def run_simulation(sim_state):
             
             if sim_state.ui.should_exit:
                 timer_thread.stop()
+                sim_state.sim_engine.cleanup_processes()
                 event_loop.quit()
 
-        except Exception as e:
-            logger.error(f"Exception in simulation_step: {e}")
-            logger.error(traceback.format_exc())
-            timer_thread.stop()
-            event_loop.quit()
-            raise  # Re-raise the exception to be caught in the main thread
 
     timer_thread.timeout.connect(simulation_step)
     timer_thread.start()
@@ -116,63 +75,11 @@ def run_simulation(sim_state):
     try:
         event_loop.exec()
     except Exception as e:
-        logger.critical(f"Simulation halted due to exception: {e}")
+        print(f"Simulation halted due to exception: {e}")
     finally:
         timer_thread.stop()
         timer_thread.wait()  # Wait for the thread to finish
 
-def print_frame_comparison(frames, frame_count):
-    if len(frames) < 2:
-        print("Not enough data for comparison")
-        return
-
-    prev_frame, slow_frame = frames
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-
-    print(f"{'Function':<50} {'Prev Calls':>10} {'Prev Time':>10} {'Prev %':>8} {'Slow Calls':>10} {'Slow Time':>10} {'Slow %':>8} {'Diff':>10}")
-    print("=" * 120)
-
-    all_funcs = set(prev_frame[2].keys()) | set(slow_frame[2].keys())
-    func_data = []
-
-    for func in all_funcs:
-        if base_dir in func[0]:  # Only include functions from your project
-            file_name = os.path.basename(func[0])
-            func_name = f"{file_name}:{func[2]}"
-            
-            prev_stats = prev_frame[2].get(func, (0, 0, 0, 0, None))
-            slow_stats = slow_frame[2].get(func, (0, 0, 0, 0, None))
-            
-            prev_calls, prev_time = prev_stats[1], prev_stats[3] * 1000  # Convert to ms
-            slow_calls, slow_time = slow_stats[1], slow_stats[3] * 1000  # Convert to ms
-            prev_percent = (prev_time / (prev_frame[0] * 1000)) * 100 if prev_frame[0] > 0 else 0
-            slow_percent = (slow_time / (slow_frame[0] * 1000)) * 100 if slow_frame[0] > 0 else 0
-            time_diff = slow_time - prev_time
-
-            func_data.append((func_name, prev_calls, prev_time, prev_percent, slow_calls, slow_time, slow_percent, time_diff))
-
-    # Sort by slow frame percentage (descending)
-    slow_frame_top = sorted(func_data, key=lambda x: x[6], reverse=True)[:20]
-    
-    # Sort by previous frame percentage (descending)
-    prev_frame_top = sorted(func_data, key=lambda x: x[3], reverse=True)[:20]
-
-    # Print frame counts
-    print(f"Previous frame count: {frame_count - 1}")
-    print(f"Slow frame count: {frame_count}")
-    print()
-
-    print("Top 20 functions in slow frame:")
-    for data in slow_frame_top:
-        print(f"{data[0]:<50} {data[1]:>10} {data[2]:>10.2f} {data[3]:>7.2f}% {data[4]:>10} {data[5]:>10.2f} {data[6]:>7.2f}% {data[7]:>10.2f}")
-
-    print("\nTop 20 functions in previous frame:")
-    for data in prev_frame_top:
-        print(f"{data[0]:<50} {data[1]:>10} {data[2]:>10.2f} {data[3]:>7.2f}% {data[4]:>10} {data[5]:>10.2f} {data[6]:>7.2f}% {data[7]:>10.2f}")
-
-    print("=" * 120)
-    print(f"Total frame time (ms): {prev_frame[0]*1000:>10.2f} {100:>7.2f}% {slow_frame[0]*1000:>10.2f} {100:>7.2f}% {(slow_frame[0] - prev_frame[0])*1000:>10.2f}")
-    pass # put a breakpoint here
 
 class TimerThread(QThread):
     timeout = Signal()
@@ -199,6 +106,14 @@ def print_simulation_summary(sim_state, frame_times):
     sim_state.avg_total_frame_times.append(avg_frame_time)
     
     print(f"Avg frame time: {avg_frame_time*1000:.2f}ms (Max: {max_frame_time*1000:.2f}ms)")
+    
+    # Print custom profiler stats
+    print("\nFunction Times:")
+    print(profiler.get_performance_stats())
+    
+    # Reset profiler stats
+    profiler.reset_stats()
+    
     print("--------------------")
 
 def format_stats(stats_dict):

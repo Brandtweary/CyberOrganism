@@ -9,6 +9,7 @@ from state_snapshot import StateSnapshot
 import queue
 import threading
 import copy
+import random
 
 
 class ReinforcementLearningAlgorithm(ABC):
@@ -33,19 +34,12 @@ class ReinforcementLearningAlgorithm(ABC):
         self.output_size = output_size
         self.hidden_layers = hidden_layers
         self.learning_rate = learning_rate
-        self.training_steps = 0
+      #  self.training_steps = random.randint(0, 30)
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.main_network = self.create_network().to(self.device)
-        self.network_lock = threading.Lock()
-        self.main_network_buffer = [self.main_network, copy.deepcopy(self.main_network)]
-        self.current_buffer = 0
         self.optimizer = self.create_optimizer()
         self.network_stats = NetworkStatistics(self.main_network, self.optimizer)
-
-        self.learn_queue = queue.Queue()
-        self.learn_thread = threading.Thread(target=self._learn_worker, daemon=True)
-        self.learn_thread.start()
 
     @abstractmethod
     def create_network(self) -> Any:
@@ -61,16 +55,6 @@ class ReinforcementLearningAlgorithm(ABC):
         Ensure that inferences are made with the network lock
         '''
         pass
-
-    def queue_learn(self, state_snapshot: StateSnapshot, total_reward: float):
-        self.learn_queue.put((state_snapshot, total_reward))
-
-    def _learn_worker(self):
-        while True:
-            state_snapshot, total_reward = self.learn_queue.get()
-            metrics = self._learn(state_snapshot)
-            self.organism.record_training_metrics(metrics, total_reward)
-            self.learn_queue.task_done()
 
     @abstractmethod
     def _learn(self, state_snapshot: StateSnapshot) -> Dict[str, Any]:

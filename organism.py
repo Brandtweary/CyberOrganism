@@ -9,8 +9,9 @@ from enums import Action
 from RL_algorithm import ReinforcementLearningAlgorithm
 from dqn import DQN
 from threading import Lock
-from collections import defaultdict
+from collections import defaultdict, Counter
 import random
+from custom_profiler import profiler
 
 
 class Organism:
@@ -70,8 +71,8 @@ class Organism:
         self.energy_consumption: float = 0.002
         self.nutrition_consumption: float = 0.0001
         self.start_nearest_items: int = 1
-        self.max_nearest_items: int = 5
-        self.nearest_item_params: int = 4  # distance, direction, reward, is_nearest_to_other
+        self.max_nearest_items: int = 1
+        self.nearest_item_params: int = 3  # distance, direction, reward
         self.current_nearest_items: int = self.start_nearest_items
         self.nearest_items_curriculum_period: float = 30 * 60  # 30 minutes in seconds
         self.proximity_reward_weight: float = 1.0
@@ -81,12 +82,13 @@ class Organism:
         # Neural Network Hyperparameters
         self.action_mapping: Dict[int, Action] = {action.value: action for action in Action}
         self.input_size: int = len(self.input_parameters) + self.max_nearest_items * self.nearest_item_params
-        self.hidden_size: int = 32
+        self.hidden_size: int = 64
         self.output_size: int = len(self.action_mapping)
         self.hidden_layers: int = 2
         self.learning_rate: float = 0.001
         self.gamma: float = 0.9
         self.target_update: int = 100
+        self.inference_update: int = 4
         self.batch_size: int = 4
         self.capacity: int = 10000
         self.gradient_clip: float = 1.0
@@ -96,20 +98,19 @@ class Organism:
         self.boltzmann_temperature: float = 0.2
 
         # Training Metrics
-        self.window_size = 100
-        self.reward_history = deque(maxlen=self.window_size)
-        self.loss_history = deque(maxlen=self.window_size)
-        self.q_value_history = deque(maxlen=self.window_size)
         self.average_reward = 0.0
         self.average_loss = 0.0
         self.average_q_value = 0.0
         self.action_history = deque(maxlen=1000)
         self.action_distribution: Dict[str, float] = {}
+        self.action_counter = Counter()
+        self.last_action_index = None
 
         # Current Experience (Working) Memory
         self.current_experience: Optional[Experience] = None
         self.current_reward: float = 0.0
         self.nearest_item_ID: Optional[UUID] = None
+        self.nearest_item_ids: List[UUID] = []
 
         # Long-Term Memory
         self.item_memory: List[UUID] = []
@@ -150,56 +151,46 @@ class Organism:
         else:
             self.current_nearest_items = self.max_nearest_items
 
+    @profiler.profile("get_internal_state")
     def get_internal_state(self, external_state: StateSnapshot) -> torch.Tensor:
         """Compute and return the internal state of the organism."""
         self.adjust_input_sensors(external_state)
-        nearest_items_vector = self.calculate_nearest_items_vector(external_state)
-        self.calculate_attention_item_parameters(external_state)
-        self.calculate_organism_attention_parameters()
+        with profiler.profile_section("get_internal_state", "calculate_nearest_items_vector"):
+            nearest_items_vector = self.calculate_nearest_items_vector(external_state)
+        with profiler.profile_section("get_internal_state", "calculate_attention_item_parameters"):
+            self.calculate_attention_item_parameters(external_state)
+        with profiler.profile_section("get_internal_state", "calculate_organism_attention_parameters"):
+            self.calculate_organism_attention_parameters()
 
         state = [getattr(self, param) for param in self.input_parameters]
         state.extend(nearest_items_vector)
 
         return torch.tensor(state, dtype=torch.float32)
 
+    @profiler.profile("calculate_nearest_items_vector")
     def calculate_nearest_items_vector(self, external_state: StateSnapshot) -> List[float]:
         """Calculate and return a vector representing the nearest items."""
         nearest_items_vector = []
-        nearest_item_ids = self.sim_engine.get_nearest_items(
-            self.x, self.y, 
-            self.current_nearest_items,
-            self.detection_radius,
-            external_state,
-            item_type='food',
-            return_IDs=True
-        )
 
-        self.nearest_item_ID = nearest_item_ids[0] if nearest_item_ids else None
-        self.update_item_memory(nearest_item_ids)
+        with profiler.profile_section("calculate_nearest_items_vector", "item_memory"):
+            self.nearest_item_ID = self.nearest_item_ids[0] if self.nearest_item_ids else None
+            self.update_item_memory(self.nearest_item_ids)
 
-        if not nearest_item_ids:
-            nearest_item_ids = self.get_item_from_memory(self.x, self.y, external_state)
-            if nearest_item_ids:
-                self.nearest_item_ID = nearest_item_ids[0]
+            if not self.nearest_item_ids:
+                self.nearest_item_ids = self.get_item_from_memory(self.x, self.y, external_state)
+                if self.nearest_item_ids:
+                    self.nearest_item_ID = self.nearest_item_ids[0]
 
-        # Get nearest items for other organisms
-        other_organisms_nearest_items = set()
-        for uuid, state in external_state.get_objects_in_snapshot(ObjectType.ORGANISM):
-            if uuid != self.id:
-                nearest_item = state.get('nearest_item_ID')
-                if nearest_item:
-                    other_organisms_nearest_items.add(nearest_item)
+        with profiler.profile_section("calculate_nearest_items_vector", "create_nearest_item_vectors"):
+            for item_id in self.nearest_item_ids:
+                item_state = external_state.get_state(item_id)
+                if item_state:
+                    distance_org_item = self.sim_engine.calculate_distance(self.x, self.y, item_state['x'], item_state['y'], normalize_to_viewport=True)
+                    direction_org_item = self.sim_engine.calculate_angle(self.x, self.y, item_state['x'], item_state['y'], normalize=True)
+                    nearest_items_vector.extend([distance_org_item, direction_org_item, item_state['reward']])
 
-        for item_id in nearest_item_ids:
-            item_state = external_state.get_state(item_id)
-            if item_state:
-                distance_org_item = self.sim_engine.calculate_distance(self.x, self.y, item_state['x'], item_state['y'], normalize_to_viewport=True)
-                direction_org_item = self.sim_engine.calculate_angle(self.x, self.y, item_state['x'], item_state['y'], normalize=True)
-                is_nearest_to_other = 1.0 if item_id in other_organisms_nearest_items else 0.0
-                nearest_items_vector.extend([distance_org_item, direction_org_item, item_state['reward'], is_nearest_to_other])
-
-        padding_length = (self.max_nearest_items - len(nearest_item_ids)) * self.nearest_item_params
-        nearest_items_vector.extend([0.0] * padding_length)
+            padding_length = (self.max_nearest_items - len(self.nearest_item_ids)) * self.nearest_item_params
+            nearest_items_vector.extend([0.0] * padding_length)
 
         return nearest_items_vector
 
@@ -286,63 +277,69 @@ class Organism:
         else:
             return 0, 0
 
+    @profiler.profile("update_state")
     def update_state(self, external_state: StateSnapshot) -> Dict[str, Any]:
         """Update the organism's state and return the changes to be applied externally."""
         self.just_spawned = False
         self.frame_skip_counter = (self.frame_skip_counter + 1) % self.frame_skip
 
         if self.frame_skip_counter == 0:
-            # Active frame: choose a new action
-            internal_state = self.get_internal_state(external_state)
-            action_index = self.RL_algorithm.select_action(internal_state)
+            with profiler.profile_section("update_state", "get_internal_state"):
+                internal_state = self.get_internal_state(external_state)
+            
+            with profiler.profile_section("update_state", "select_action"):
+                action_index = self.RL_algorithm.select_action(internal_state)
         else:
-            # Skipped frame: use the last action from history or choose random if history is empty
-            if self.action_history:
-                action_index = self.action_history[-1]
-            else:
-                action_index = random.choice(list(self.action_mapping.keys()))
+            action_index = self.last_action_index if self.last_action_index is not None else random.choice(list(self.action_mapping.keys()))
 
-        # Calculate action distribution for all frames
-        self.calculate_action_distribution(action_index)
+        with profiler.profile_section("update_state", "calculate_action_distribution"):
+            self.calculate_action_distribution(action_index)
 
-        attention_vector = self.update_attention_point(action_index)
-        movement_vector = self.move(attention_vector)
-        
-        external_state_change = {
-            'movement_vector': movement_vector,
-            'attention_vector': attention_vector,
-        }
-        
-        metabolism_changes = self.update_metabolism()
-        external_state_change.update(metabolism_changes)
-        
-        if self.frame_skip_counter == 0:
-            # Only store experience on active frames
-            self.current_experience = Experience(
-                state=self.get_internal_state(external_state),
-                action=action_index,
-                reward=None, 
-                next_state=None
-            )
+        with profiler.profile_section("update_state", "action_processing"):
+            attention_vector = self.update_attention_point(action_index)
+            movement_vector = self.move(attention_vector)
+            
+            external_state_change = {
+                'movement_vector': movement_vector,
+                'attention_vector': attention_vector,
+            }
+            
+            metabolism_changes = self.update_metabolism()
+            external_state_change.update(metabolism_changes)
+            
+            if self.frame_skip_counter == 0:
+                # Only store experience on active frames
+                self.current_experience = Experience(
+                    state=internal_state,
+                    action=action_index,
+                    reward=None, 
+                    next_state=None
+                )
         
         return external_state_change
     
     def calculate_action_distribution(self, action_index: int) -> None:
         """Calculate the action distribution based on the action index."""
+        action_name = self.action_mapping[action_index].name
+        
+        # Update action history and counter
+        if len(self.action_history) == 1000:
+            old_action = self.action_history[0]
+            self.action_counter[self.action_mapping[old_action].name] -= 1
+        
         self.action_history.append(action_index)
-        total_actions = len(self.action_history)
-        if total_actions == 0:
-            return
+        self.action_counter[action_name] += 1
+        
+        # Update last action index
+        self.last_action_index = action_index
 
-        action_counts = {action.name: 0 for action in Action}
-        for action_index in self.action_history:
-            action_name = self.action_mapping[action_index].name
-            action_counts[action_name] += 1
-
-        self.action_distribution = {
-            action_name: count / total_actions
-            for action_name, count in action_counts.items()
-        }
+        # Update distribution every 10 actions (or another suitable interval)
+        if len(self.action_history) % 10 == 0:
+            total_actions = len(self.action_history)
+            self.action_distribution = {
+                action_name: count / total_actions
+                for action_name, count in self.action_counter.items()
+            }
 
     def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
         """Calculate the reward based on the old and new states."""
@@ -407,46 +404,39 @@ class Organism:
         reward = 0.5 * math.cos(normalized_angle)
         return reward
 
+    @profiler.profile("apply_state")
     def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
         """Apply the new state, calculate rewards, and potentially queue learning."""
         if self.just_spawned:
             return  # organism is not in the old state, so the following code would throw an error
 
         if self.frame_skip_counter == 0:
-            # Only process rewards and queue learning on active frames
-            total_reward = self.calculate_rewards(old_state, new_state)
-            new_internal_state = self.get_internal_state(new_state)
+            with profiler.profile_section("apply_state", "internal_processing"):
+                total_reward = self.calculate_rewards(old_state, new_state)
+                new_internal_state = self.get_internal_state(new_state)
             
-            if self.current_experience:
-                updated_experience = Experience(
-                    state=self.current_experience.state,
-                    action=self.current_experience.action,
-                    reward=total_reward,
-                    next_state=new_internal_state
-                )
-                self.replay_buffer.add(updated_experience)
-                self.replay_buffer_size = self.replay_buffer.get_tree_size()
+            
+            with profiler.profile_section("apply_state", "replay_buffer"):
+                if self.current_experience:
+                    updated_experience = Experience(
+                        state=self.current_experience.state,
+                        action=self.current_experience.action,
+                        reward=total_reward,
+                        next_state=new_internal_state
+                    )
+                    self.replay_buffer.add(updated_experience)
+                    self.replay_buffer_size = self.replay_buffer.get_tree_size()
 
             self.current_experience = None
             
             self.queue_learn_conditionally(new_state, total_reward)
 
+    @profiler.profile("queue_learn_conditionally")
     def queue_learn_conditionally(self, new_state: StateSnapshot, total_reward: float) -> None:
-        """Conditionally queue a learning task based on the current queue size."""
-        queue_size = self.RL_algorithm.learn_queue.qsize()
-        max_queue_size = 20 * self.batch_size
-        
-        if queue_size <= 1:
-            queue_probability = 1.0
-        elif queue_size >= max_queue_size:
-            queue_probability = 0.2
-        else:
-            # Linear interpolation between 1.0 and 0.2
-            queue_probability = 1.0 - 0.8 * (queue_size - 1) / (max_queue_size - 1)
-        
-        # Randomly decide whether to queue the learning task
-        if random.random() < queue_probability:
-            self.RL_algorithm.queue_learn(new_state, total_reward)
+        """Conditionally queue a learning task if the replay buffer can be sampled."""
+        if self.replay_buffer.can_sample():
+            experiences = self.replay_buffer.sample()
+            self.RL_algorithm.queue_learn(new_state, total_reward, experiences)
     
     def record_training_metrics(self, metrics: Dict[str, Any], total_reward: float) -> None:
         """Record and update training metrics including loss, Q-values, and rewards."""
