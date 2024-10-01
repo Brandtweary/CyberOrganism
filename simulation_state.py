@@ -42,6 +42,7 @@ class SimulationState:
         self.total_time = 0
         self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
         self.network_record_stats = self.test_organism.RL_algorithm.network_stats.record_stats
+        self.action_distribution = self.test_organism.action_distribution
 
         # Framerate Calculation
         self.avg_total_frame_times = []
@@ -91,6 +92,7 @@ class SimulationState:
         self.total_time = time.time() - self.start_time
         self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
         self.network_record_stats = self.test_organism.RL_algorithm.network_stats.record_stats
+        self.action_distribution = self.test_organism.action_distribution
 
     def generate_organism_stats(self):
         return [
@@ -191,7 +193,7 @@ class UIUpdater(QThread):
                 self.update_signal.emit(None, performance_stats, None, None)
             else:  # self.current_section == 2
                 training_stats = self.simulation_state.generate_training_stats()
-                action_distribution = self.simulation_state.test_organism.action_distribution
+                action_distribution = self.simulation_state.action_distribution
                 self.update_signal.emit(None, None, training_stats, action_distribution)
 
             # Move to the next section

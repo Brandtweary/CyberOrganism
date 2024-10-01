@@ -75,7 +75,7 @@ class Organism:
         self.nearest_item_params: int = 3  # distance, direction, reward
         self.current_nearest_items: int = self.start_nearest_items
         self.nearest_items_curriculum_period: float = 30 * 60  # 30 minutes in seconds
-        self.proximity_reward_weight: float = 1.0
+        self.proximity_reward_weight: float = 2.0
         self.direction_reward_weight: float = 1.0
         self.focus_reward_weight: float = 1.0
 
@@ -87,12 +87,12 @@ class Organism:
         self.hidden_layers: int = 2
         self.learning_rate: float = 0.001
         self.gamma: float = 0.9
-        self.target_update: int = 100
+        self.target_update: int = 300
         self.inference_update: int = 4
         self.batch_size: int = 4
         self.capacity: int = 10000
         self.gradient_clip: float = 1.0
-        self.epsilon: float = 1.0
+        self.epsilon: float = 0.8
         self.epsilon_min: float = 0.01
         self.epsilon_decay: float = 0.999
         self.boltzmann_temperature: float = 0.2
