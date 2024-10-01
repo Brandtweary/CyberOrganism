@@ -136,22 +136,38 @@ class SimAreaWidget(QWidget):
             attention_x, attention_y = org_state['attention_x'], org_state['attention_y']
             screen_x, screen_y = self.grid_to_screen(attention_x, attention_y)
 
-            # Calculate the size of the attention point
-            attention_size = int(self.sim_engine.CELL_SIZE * 1.0)
+            # Only draw if the attention point is within the visible area
+            if 0 <= screen_x < self.width() and 0 <= screen_y < self.height():
+                # Calculate the size of the attention point
+                attention_size = int(self.sim_engine.CELL_SIZE * 1.0)
 
-            # Calculate the offset to center the attention point
-            offset = (attention_size - self.sim_engine.CELL_SIZE) // 2
+                # Calculate the offset to center the attention point
+                offset = (attention_size - self.sim_engine.CELL_SIZE) // 2
 
-            # Adjust the position to center the attention point
-            centered_x = screen_x - offset
-            centered_y = screen_y - offset
+                # Adjust the position to center the attention point
+                centered_x = screen_x - offset
+                centered_y = screen_y - offset
 
-            # Draw the attention point
-            rect = QRectF(centered_x, centered_y, attention_size, attention_size)
-            painter.fillRect(rect, QColor(*self.RED))  # Use RED from self
+                # Draw the attention point
+                rect = QRectF(centered_x, centered_y, attention_size, attention_size)
+                painter.fillRect(rect, QColor(*self.RED))  # Use RED from self
 
     def draw_organisms(self, painter):
+        test_organism_id = self.sim_engine.test_organism.id if hasattr(self.sim_engine, 'test_organism') else None
+
         for org_id, org_state in self.sim_state.current_state.get_objects_in_snapshot(ObjectType.ORGANISM):
             screen_x, screen_y = self.grid_to_screen(org_state['x'], org_state['y'])
-            rect = QRectF(screen_x, screen_y, self.sim_engine.CELL_SIZE, self.sim_engine.CELL_SIZE)
-            painter.fillRect(rect, QColor(*self.NEON_GREEN))
+            
+            # Only draw if the organism is within the visible area
+            if 0 <= screen_x < self.width() and 0 <= screen_y < self.height():
+                # Draw blue halo for test organism
+                if org_id == test_organism_id:
+                    halo_size = self.sim_engine.CELL_SIZE * 3
+                    halo_x = screen_x - self.sim_engine.CELL_SIZE
+                    halo_y = screen_y - self.sim_engine.CELL_SIZE
+                    halo_rect = QRectF(halo_x, halo_y, halo_size, halo_size)
+                    painter.fillRect(halo_rect, QColor(*self.BLUE))
+
+                # Draw the organism
+                rect = QRectF(screen_x, screen_y, self.sim_engine.CELL_SIZE, self.sim_engine.CELL_SIZE)
+                painter.fillRect(rect, QColor(*self.NEON_GREEN))

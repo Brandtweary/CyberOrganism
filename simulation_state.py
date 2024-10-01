@@ -43,13 +43,6 @@ class SimulationState:
         self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
         self.network_record_stats = self.test_organism.RL_algorithm.network_stats.record_stats
 
-        # UI update control
-        # self.ui_update_timer = 0
-        # self.last_updated_section = -1
-        # self.ui_update_interval = 0.1
-        # self.frame_count = 0
-        # self.loading_frames = 60
-
         # Framerate Calculation
         self.avg_total_frame_times = []
 
@@ -82,11 +75,6 @@ class SimulationState:
             # Update training metrics
             self.update_training_metrics()
 
-        # with profiler.profile_section("update_simulation_state", "update_ui"):
-        #     # Update UI
-        #     if self.frame_count > self.loading_frames - 2:
-        #         self.update_ui()
-
     def update_performance_metrics(self):
         if not self.performance_updater.queue.empty():
             self.cpu_usage, self.memory_usage, self.gpu_usage, self.learning_backlog = self.performance_updater.queue.get()
@@ -103,32 +91,6 @@ class SimulationState:
         self.total_time = time.time() - self.start_time
         self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
         self.network_record_stats = self.test_organism.RL_algorithm.network_stats.record_stats
-
-    #def update_ui(self):
-        # if self.last_updated_section == -1:
-        #     # First update: update all sections
-        #     organism_stats = self.generate_organism_stats()
-        #     performance_stats = self.generate_performance_stats()
-        #     training_stats = self.generate_training_stats()
-        #     action_distribution = self.test_organism.action_distribution
-        #     self.ui.update_left_sidebar(organism_stats, performance_stats, training_stats, action_distribution)
-        #     self.last_updated_section = 2  # Set to 2 so next update starts with 0
-        # else:
-        #     self.ui_update_timer += self.sim_engine.UPDATE_INTERVAL
-        #     if self.ui_update_timer >= self.ui_update_interval:
-        #         self.ui_update_timer = 0
-        #         self.last_updated_section = (self.last_updated_section + 1) % 3
-
-        #         if self.last_updated_section == 0:
-        #             organism_stats = self.generate_organism_stats()
-        #             self.ui.update_left_sidebar(organism_stats, None, None, None)
-        #         elif self.last_updated_section == 1:
-        #             performance_stats = self.generate_performance_stats()
-        #             self.ui.update_left_sidebar(None, performance_stats, None, None)
-        #         else:
-        #             training_stats = self.generate_training_stats()
-        #             action_distribution = self.test_organism.action_distribution
-        #             self.ui.update_left_sidebar(None, None, training_stats, action_distribution)
 
     def generate_organism_stats(self):
         return [

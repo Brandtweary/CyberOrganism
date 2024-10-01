@@ -24,9 +24,9 @@ class SimulationEngine:
         self.UPDATE_INTERVAL = 1.0 / ui.FPS
         self.MAX_FOOD_ITEMS = 32
         self.collision_range = 2 
-        self.max_zoomorphs = 20
+        self.max_zoomorphs = 12
         self.deceased_organisms = 0
-        self.starting_organisms = 8
+        self.starting_organisms = 4
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE

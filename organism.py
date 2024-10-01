@@ -173,7 +173,7 @@ class Organism:
         nearest_items_vector = []
 
         with profiler.profile_section("calculate_nearest_items_vector", "item_memory"):
-            self.nearest_item_ID = self.nearest_item_ids[0] if self.nearest_item_ids else None
+            self.nearest_item_ID = self.nearest_item_ids[0] if self.nearest_item_ids else None  # these are now set in batch_state_preparation
             self.update_item_memory(self.nearest_item_ids)
 
             if not self.nearest_item_ids:
