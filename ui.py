@@ -18,6 +18,7 @@ class UI:
         self.main_window = QMainWindow()
         self.should_exit = False
         self.loaded = False
+        self.loading_time = 2.0
 
         # Get the primary screen
         screen = QGuiApplication.primaryScreen()
@@ -175,24 +176,23 @@ class UI:
         event.accept()
 
     def update_left_sidebar(self, organism_stats, performance_stats, training_stats, action_distribution):
-        if organism_stats is not None:
+        if organism_stats is not None and organism_stats:
             self.update_stat_section(organism_stats, "organism_stats")
-        if performance_stats is not None:
+        if performance_stats is not None and performance_stats:
             self.update_stat_section(performance_stats, "performance_stats")
-        if training_stats is not None:
+        if training_stats is not None and training_stats:
             self.update_stat_section(training_stats, "training_stats")
-        if action_distribution is not None:
+        if action_distribution is not None and action_distribution:
             self.action_distribution_widget.update_content(action_distribution)
 
     def update_stat_section(self, stats, section_name):
         layout = getattr(self, f"{section_name}_layout")
         blocks = getattr(self, f"{section_name}_blocks")
 
-        # If it's the training stats section, temporarily remove the action distribution widget
         if section_name == "training_stats":
             layout.removeWidget(self.action_distribution_widget)
 
-        for name, value in stats.items():
+        for name, value in stats:
             if name not in blocks:
                 block = StatBlock(name, value)
                 layout.addWidget(block)
@@ -201,18 +201,14 @@ class UI:
                 blocks[name].update_value(value)
         
         for name in list(blocks.keys()):
-            if name not in stats:
+            if name not in [stat[0] for stat in stats]:
                 blocks[name].deleteLater()
                 del blocks[name]
         
-        # Find the maximum width of name labels
         max_width = max(block.name_label.sizeHint().width() for block in blocks.values())
-
-        # Set all name labels to the maximum width
         for block in blocks.values():
             block.set_name_width(max_width)
 
-        # If it's the training stats section, add the action distribution widget back at the end
         if section_name == "training_stats":
             layout.addWidget(self.action_distribution_widget)
 
@@ -236,7 +232,7 @@ class UI:
         self.update_stat_section(debug_info, "debug_info")
 
     def update(self, sim_state):
-        if sim_state.frame_count <= sim_state.loading_frames:
+        if sim_state.total_time <= self.loading_time:
             # Keep UI elements hidden during loading
             self.hide_ui_elements()
         elif not self.loaded:

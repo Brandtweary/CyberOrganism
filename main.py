@@ -40,7 +40,7 @@ def run_simulation(sim_state):
         frame_start = time.time()
   
         #with profiler.profile_section("simulation_step", "processEvents"):
-           # sim_state.ui.app.processEvents()  # add this to tighten UI when frame time reaches budget (~33ms)
+            #sim_state.ui.app.processEvents()  # enable to profile Qt event processing, disable to process events during downtime
         with profiler.profile_section("simulation_step", "sim_state_update"):
             sim_state.update()
         with profiler.profile_section("simulation_step", "ui_update"):
@@ -65,6 +65,7 @@ def run_simulation(sim_state):
             
             if sim_state.ui.should_exit:
                 timer_thread.stop()
+                sim_state.cleanup()
                 sim_state.sim_engine.cleanup_processes()
                 event_loop.quit()
 
@@ -79,6 +80,8 @@ def run_simulation(sim_state):
     finally:
         timer_thread.stop()
         timer_thread.wait()  # Wait for the thread to finish
+        sim_state.cleanup()
+        sim_state.sim_engine.cleanup_processes()
 
 
 class TimerThread(QThread):
@@ -90,9 +93,21 @@ class TimerThread(QThread):
         self.running = True
 
     def run(self):
+        last_time = time.perf_counter()
         while self.running:
-            time.sleep(self.interval)
+            current_time = time.perf_counter()
+            elapsed = current_time - last_time
+            
+            # Calculate sleep time, adjusting for longer frames but not shorter ones
+            if elapsed > self.interval:
+                sleep_time = max(0, self.interval - (elapsed - self.interval))
+            else:
+                sleep_time = self.interval
+            
+            time.sleep(sleep_time)
             self.timeout.emit()
+            
+            last_time = current_time
 
     def stop(self):
         self.running = False
@@ -116,8 +131,8 @@ def print_simulation_summary(sim_state, frame_times):
     
     print("--------------------")
 
-def format_stats(stats_dict):
-    return [f"{key}: {value}" for key, value in stats_dict.items()]
+def format_stats(stats_list):
+    return [f"{key}: {value}" for key, value in stats_list]
 
 def print_simulation_stats(sim_state):
     print("\n--- Organism Statistics ---")

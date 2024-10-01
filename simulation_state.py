@@ -3,69 +3,154 @@ import time
 from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetUtilizationRates
 from concurrent.futures import ThreadPoolExecutor
 from custom_profiler import profiler
+from threading import Thread
+from queue import Queue
+from PySide6.QtCore import QThread, Signal, QObject
+
+
 
 class SimulationState:
     def __init__(self, simulation_engine, ui):
+        # Core simulation attributes
         self.sim_engine = simulation_engine
         self.ui = ui
         self.current_state = simulation_engine.current_state
         self.test_organism = simulation_engine.test_organism
+
+        # Organism parameters
         self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
         self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
+
+        # Performance metrics
         self.cpu_usage = psutil.cpu_percent()
         self.memory_usage = psutil.virtual_memory().percent
         self.available_memory = psutil.virtual_memory().available / (1024 * 1024)
         self.gpu_usage = 0.0
         self.framerate = 0.0
-        self.deceased_organisms = self.sim_engine.deceased_organisms
+        nvmlInit()
+        self.gpu_handle = nvmlDeviceGetHandleByIndex(0)
         self.learning_backlog = 0
 
-        # Summary statistics
+        # Simulation statistics
+        self.deceased_organisms = self.sim_engine.deceased_organisms
+        self.num_organisms = len(self.sim_engine.organisms)
+        self.num_items = len(self.sim_engine.items)
+
+        # Training metrics
         self.time_low_loss = 0
         self.start_time = time.time()
         self.total_time = 0
-
-        # Add network statistics
         self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
         self.network_record_stats = self.test_organism.RL_algorithm.network_stats.record_stats
 
-        # Add new attributes for storing average times
+        # UI update control
+        # self.ui_update_timer = 0
+        # self.last_updated_section = -1
+        # self.ui_update_interval = 0.1
+        # self.frame_count = 0
+        # self.loading_frames = 60
+
+        # Framerate Calculation
         self.avg_total_frame_times = []
 
-        self.ui_update_timer = 0
-        self.last_updated_section = -1
-        self.ui_update_interval = 0.1
+        self.performance_updater = PerformanceUpdater(self)
+        self.ui_updater = UIUpdater(self)
+        self.ui_updater.update_signal.connect(self.ui.update_left_sidebar)
+        self.ui_updater.start()        
+        self.performance_updater.start()
 
-        self.frame_count = 0
-        self.loading_frames = 60
+    @profiler.profile("update_simulation_state")
+    def update(self):        
+        with profiler.profile_section("update_simulation_state", "update_simulation"):
+            # Update core simulation
+            self.sim_engine.update_simulation()
+            self.current_state = self.sim_engine.current_state
 
-        nvmlInit()
-        self.gpu_handle = nvmlDeviceGetHandleByIndex(0)
+        with profiler.profile_section("update_simulation_state", "organism_parameters"):            # Update organism parameters
+            self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
+            self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
+        
+        with profiler.profile_section("update_simulation_state", "performance_metrics"):
+            # Update performance metrics
+            self.update_performance_metrics()
 
+        with profiler.profile_section("update_simulation_state", "simulation_statistics"):
+            # Update simulation statistics
+            self.update_simulation_statistics()
+
+        with profiler.profile_section("update_simulation_state", "training_metrics"):
+            # Update training metrics
+            self.update_training_metrics()
+
+        # with profiler.profile_section("update_simulation_state", "update_ui"):
+        #     # Update UI
+        #     if self.frame_count > self.loading_frames - 2:
+        #         self.update_ui()
+
+    def update_performance_metrics(self):
+        if not self.performance_updater.queue.empty():
+            self.cpu_usage, self.memory_usage, self.gpu_usage, self.learning_backlog = self.performance_updater.queue.get()
+
+    def update_simulation_statistics(self):
+        self.deceased_organisms = self.sim_engine.deceased_organisms
+        self.num_organisms = len(self.sim_engine.organisms)
+        self.num_items = len(self.sim_engine.items)
+
+    def update_training_metrics(self):
+        current_loss = self.test_organism.average_loss
+        if current_loss < 0.5:
+            self.time_low_loss += self.sim_engine.UPDATE_INTERVAL
+        self.total_time = time.time() - self.start_time
+        self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
+        self.network_record_stats = self.test_organism.RL_algorithm.network_stats.record_stats
+
+    #def update_ui(self):
+        # if self.last_updated_section == -1:
+        #     # First update: update all sections
+        #     organism_stats = self.generate_organism_stats()
+        #     performance_stats = self.generate_performance_stats()
+        #     training_stats = self.generate_training_stats()
+        #     action_distribution = self.test_organism.action_distribution
+        #     self.ui.update_left_sidebar(organism_stats, performance_stats, training_stats, action_distribution)
+        #     self.last_updated_section = 2  # Set to 2 so next update starts with 0
+        # else:
+        #     self.ui_update_timer += self.sim_engine.UPDATE_INTERVAL
+        #     if self.ui_update_timer >= self.ui_update_interval:
+        #         self.ui_update_timer = 0
+        #         self.last_updated_section = (self.last_updated_section + 1) % 3
+
+        #         if self.last_updated_section == 0:
+        #             organism_stats = self.generate_organism_stats()
+        #             self.ui.update_left_sidebar(organism_stats, None, None, None)
+        #         elif self.last_updated_section == 1:
+        #             performance_stats = self.generate_performance_stats()
+        #             self.ui.update_left_sidebar(None, performance_stats, None, None)
+        #         else:
+        #             training_stats = self.generate_training_stats()
+        #             action_distribution = self.test_organism.action_distribution
+        #             self.ui.update_left_sidebar(None, None, training_stats, action_distribution)
 
     def generate_organism_stats(self):
-        stats = {}
-        for param, value in self.display_parameters.items():
-            formatted_name = self.format_parameter_name(param)
-            formatted_value = f"{value:.3f}" if isinstance(value, float) else value
-            stats[formatted_name] = formatted_value
-        return stats
+        return [
+            (self.format_parameter_name(param), f"{value:.3f}" if isinstance(value, float) else value)
+            for param, value in self.display_parameters.items()
+        ]
 
     def generate_performance_stats(self):
-        return {
-            "CPU Usage": f"{self.cpu_usage:.1f}%",
-            "Memory Usage": f"{self.memory_usage:.1f}%",
-            "GPU Usage": f"{self.gpu_usage:.1f}%",
-            "Organism Count": str(self.num_organisms),
-            "Deceased Organisms": str(self.deceased_organisms),
-            "Item Count": str(self.num_items),
-            "Learning Backlog": str(self.learning_backlog),
-            "FPS": f"{self.framerate:.1f}",
-            "Simulation Time": f"{int(self.total_time)} seconds"
-        }
+        return [
+            ("CPU Usage", f"{self.cpu_usage:.1f}%"),
+            ("Memory Usage", f"{self.memory_usage:.1f}%"),
+            ("GPU Usage", f"{self.gpu_usage:.1f}%"),
+            ("Organism Count", str(self.num_organisms)),
+            ("Deceased Organisms", str(self.deceased_organisms)),
+            ("Item Count", str(self.num_items)),
+            ("Learning Backlog", str(self.learning_backlog)),
+            ("FPS", f"{self.framerate:.1f}"),
+            ("Simulation Time", f"{int(self.total_time)} seconds")
+        ]
 
     def generate_network_stats(self):
-        stats = {}
+        stats = []
         for stat_type, stat_info in self.network_record_stats.items():
             if stat_info['record']:
                 for stat_name in stat_info['stat_names']:
@@ -74,77 +159,84 @@ class SimulationState:
                         if values:
                             value = values[-1]
                             formatted_value = f"{value:.3f}" if isinstance(value, float) else value
-                            stats[f"{stat_type} - {stat_name}"] = formatted_value
+                            stats.append((f"{stat_type} - {stat_name}", formatted_value))
         return stats
     
-    def generate_training_metrics(self):
-        return {
-            "Average Reward": f"{self.test_organism.average_reward:.3f}",
-            "Average Loss": f"{self.test_organism.average_loss:.3f}",
-            "Average Q-Value": f"{self.test_organism.average_q_value:.3f}"
-        }
-
-    @profiler.profile("update_simulation_state")
-    def update(self):
-        self.frame_count += 1
-        
-        self.sim_engine.update_simulation()
-        self.current_state = self.sim_engine.current_state
-        self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
-        self.display_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.display_parameters}
-        
-        # Update summary statistics
-        current_loss = self.test_organism.average_loss
-        if current_loss < 0.5:
-            self.time_low_loss += self.sim_engine.UPDATE_INTERVAL
-        self.total_time = time.time() - self.start_time
-        
-        # Update performance metrics
-        self.cpu_usage = psutil.cpu_percent()
-        self.memory_usage = psutil.virtual_memory().percent
-        utilization = nvmlDeviceGetUtilizationRates(self.gpu_handle)
-        self.gpu_usage = utilization.gpu
-        self.deceased_organisms = self.sim_engine.deceased_organisms
-        self.num_organisms = len(self.sim_engine.organisms)
-        self.num_items = len(self.sim_engine.items)
-        self.learning_backlog = sum(organism.RL_algorithm.get_learning_backlog() for organism in self.sim_engine.organisms)
-
-        # Update network statistics
-        self.network_stats = self.test_organism.RL_algorithm.network_stats.stats
-        self.network_record_stats = self.test_organism.RL_algorithm.network_stats.record_stats
-
-        # Update UI
-        if self.frame_count > self.loading_frames - 2:
-            self.update_ui()
- 
-    def update_ui(self):
-        if self.last_updated_section == -1:
-            # First update: update all sections
-            organism_stats = self.generate_organism_stats()
-            performance_stats = self.generate_performance_stats()
-            training_metrics = self.generate_training_metrics()
-            action_distribution = self.test_organism.action_distribution
-            self.ui.update_left_sidebar(organism_stats, performance_stats, training_metrics, action_distribution)
-            self.last_updated_section = 2  # Set to 2 so next update starts with 0
-        else:
-            self.ui_update_timer += self.sim_engine.UPDATE_INTERVAL
-            if self.ui_update_timer >= self.ui_update_interval:
-                self.ui_update_timer = 0
-                self.last_updated_section = (self.last_updated_section + 1) % 3
-
-                if self.last_updated_section == 0:
-                    organism_stats = self.generate_organism_stats()
-                    self.ui.update_left_sidebar(organism_stats, None, None, None)
-                elif self.last_updated_section == 1:
-                    performance_stats = self.generate_performance_stats()
-                    self.ui.update_left_sidebar(None, performance_stats, None, None)
-                else:
-                    training_metrics = self.generate_training_metrics()
-                    action_distribution = self.test_organism.action_distribution
-                    self.ui.update_left_sidebar(None, None, training_metrics, action_distribution)
+    def generate_training_stats(self):
+        return [
+            ("Average Reward", f"{self.test_organism.average_reward:.3f}"),
+            ("Average Loss", f"{self.test_organism.average_loss:.3f}"),
+            ("Average Q-Value", f"{self.test_organism.average_q_value:.3f}")
+        ]
 
     @staticmethod
     def format_parameter_name(name):
         if name is None:
             return "None"
         return ' '.join(word.capitalize() for word in str(name).split('_'))
+
+    def cleanup(self):
+        if hasattr(self, 'performance_updater'):
+            self.performance_updater.stop()
+            self.performance_updater.join()
+        if hasattr(self, 'ui_updater'):
+            self.ui_updater.stop()
+            self.ui_updater.wait()
+
+    def __del__(self):
+        self.cleanup()
+
+
+class PerformanceUpdater(Thread):
+    def __init__(self, simulation_state):
+        super().__init__()
+        self.simulation_state = simulation_state
+        self.queue = Queue()
+        self.running = True
+
+    def run(self):
+        while self.running:
+            cpu_usage = psutil.cpu_percent()
+            memory_usage = psutil.virtual_memory().percent
+            utilization = nvmlDeviceGetUtilizationRates(self.simulation_state.gpu_handle)
+            gpu_usage = utilization.gpu
+            learning_backlog = sum(organism.RL_algorithm.get_learning_backlog() 
+                                   for organism in self.simulation_state.sim_engine.organisms)
+            
+            self.queue.put((cpu_usage, memory_usage, gpu_usage, learning_backlog))
+            time.sleep(0.25)  # Update every 250ms
+
+    def stop(self):
+        self.running = False
+
+class UIUpdater(QThread):
+    update_signal = Signal(list, list, list, list)
+
+    def __init__(self, simulation_state):
+        super().__init__()
+        self.simulation_state = simulation_state
+        self.running = True
+        self.current_section = 0
+        self.update_interval = 0.1  # Update every 100ms
+
+    def run(self):
+        while self.running:
+            if self.current_section == 0:
+                organism_stats = self.simulation_state.generate_organism_stats()
+                self.update_signal.emit(organism_stats, None, None, None)
+            elif self.current_section == 1:
+                performance_stats = self.simulation_state.generate_performance_stats()
+                self.update_signal.emit(None, performance_stats, None, None)
+            else:  # self.current_section == 2
+                training_stats = self.simulation_state.generate_training_stats()
+                action_distribution = self.simulation_state.test_organism.action_distribution
+                self.update_signal.emit(None, None, training_stats, action_distribution)
+
+            # Move to the next section
+            self.current_section = (self.current_section + 1) % 3
+
+            # Sleep for the update interval
+            self.msleep(int(self.update_interval * 1000))
+
+    def stop(self):
+        self.running = False

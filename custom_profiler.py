@@ -146,7 +146,7 @@ profiler.disable("get_internal_state")
 profiler.disable("calculate_nearest_items_vector")
 profiler.disable("update_state")
 profiler.disable("queue_learn_conditionally")
-#profiler.disable("update_simulation")
+profiler.disable("update_simulation")
 profiler.disable("_apply_simulation_state_threaded")
 profiler.disable("_apply_simulation_state_sequential")
 

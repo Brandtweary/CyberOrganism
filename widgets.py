@@ -70,7 +70,7 @@ class FoldingStatBlock(QWidget):
         self.toggle_button.setText(f"{arrow} {self.title}")
 
     def update_content(self, data):
-        for name, value in data.items():
+        for name, value in data:
             if name not in self.stat_blocks:
                 stat_block = StatBlock(name, self.format_value(value))
                 self.content_layout.addWidget(stat_block)
@@ -78,21 +78,18 @@ class FoldingStatBlock(QWidget):
             else:
                 self.stat_blocks[name].update_value(self.format_value(value))
         
-        # Remove any stat blocks that are no longer in the data
         for name in list(self.stat_blocks.keys()):
-            if name not in data:
+            if name not in [item[0] for item in data]:
                 self.stat_blocks[name].deleteLater()
                 del self.stat_blocks[name]
         
-        # Adjust name widths
         if self.stat_blocks:
             max_width = max(block.name_label.sizeHint().width() for block in self.stat_blocks.values())
             for block in self.stat_blocks.values():
                 block.set_name_width(max_width)
         
-        # Adjust layout if necessary
-        self.content_widget.adjustSize()
-        self.adjustSize()
+        self.content_widget.updateGeometry() # this was adjustSize()
+        self.updateGeometry()  # this was adjustSize()
 
     def format_value(self, value):
         if isinstance(value, float):

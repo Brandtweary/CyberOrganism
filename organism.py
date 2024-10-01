@@ -102,7 +102,7 @@ class Organism:
         self.average_loss = 0.0
         self.average_q_value = 0.0
         self.action_history = deque(maxlen=1000)
-        self.action_distribution: Dict[str, float] = {}
+        self.action_distribution: List[Tuple[str, float]] = []
         self.action_counter = Counter()
         self.last_action_index = None
 
@@ -336,10 +336,10 @@ class Organism:
         # Update distribution every 10 actions (or another suitable interval)
         if len(self.action_history) % 10 == 0:
             total_actions = len(self.action_history)
-            self.action_distribution = {
-                action_name: count / total_actions
-                for action_name, count in self.action_counter.items()
-            }
+            self.action_distribution = [
+                (action.name, self.action_counter.get(action.name, 0) / total_actions)
+                for action in self.action_mapping.values()
+            ]
 
     def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
         """Calculate the reward based on the old and new states."""
