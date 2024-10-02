@@ -47,6 +47,7 @@ class SimulationState:
 
         # Framerate Calculation
         self.avg_total_frame_times = []
+        self.max_frame_time = 0
 
         self.performance_updater = PerformanceUpdater(self)
         self.ui_updater = UIUpdater(self)
@@ -60,6 +61,7 @@ class SimulationState:
             # Update core simulation
             self.sim_engine.update_simulation()
             self.current_state = self.sim_engine.current_state
+            self.test_organism = self.sim_engine.test_organism
 
         with profiler.profile_section("update_simulation_state", "organism_parameters"):            # Update organism parameters
             self.input_parameters = {param: getattr(self.test_organism, param) for param in self.test_organism.input_parameters}
@@ -97,7 +99,7 @@ class SimulationState:
 
     def update_training_metrics(self):
         current_loss = self.test_organism.average_loss
-        if current_loss < 0.5:
+        if current_loss < 0.1:
             self.time_low_loss += self.sim_engine.UPDATE_INTERVAL
         self.total_time = time.time() - self.start_time
         self.network_stats = self.test_organism.RL_algorithm.network_stats.stats

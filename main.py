@@ -119,6 +119,7 @@ def print_simulation_summary(sim_state, frame_times):
     max_frame_time = max(frame_times) if frame_times else 0
     
     sim_state.avg_total_frame_times.append(avg_frame_time)
+    sim_state.max_frame_time = max(sim_state.max_frame_time, max_frame_time)
     
     print(f"Avg frame time: {avg_frame_time*1000:.2f}ms (Max: {max_frame_time*1000:.2f}ms)")
     
@@ -154,7 +155,7 @@ def print_final_summary(sim_state):
     
     if sim_state.avg_total_frame_times:
         overall_avg_total_frame_time = sum(sim_state.avg_total_frame_times) / len(sim_state.avg_total_frame_times)
-        print(f"Overall average frame time: {overall_avg_total_frame_time*1000:.2f}ms")
+        print(f"Overall average frame time: {overall_avg_total_frame_time*1000:.2f}ms (Max: {sim_state.max_frame_time*1000:.2f}ms)")
     
     print("\n--- Network Statistics ---")
     for stat in format_stats(sim_state.generate_network_stats()):

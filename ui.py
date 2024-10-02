@@ -1,7 +1,7 @@
 import sys
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QRubberBand
 from PySide6.QtGui import QFont, QColor, QPalette, QCursor, QGuiApplication, QScreen, QPainter, Qt
-from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtCore import Qt, QSize, QTimer, QRect, QPoint
 from drawing import SimAreaWidget
 import time
 from shared_resources import debug
@@ -37,6 +37,9 @@ class UI:
         self.sidebar_toggle_timer = QTimer()
         self.sidebar_toggle_timer.setSingleShot(True)
         self.sidebar_toggle_timer.timeout.connect(self.toggle_sidebar)
+
+        self.rubber_band = None
+        self.origin = QPoint()
 
     def setup_ui(self):
         self.setup_main_window()
@@ -146,6 +149,8 @@ class UI:
     def setup_key_handlers(self):
         self.main_window.keyPressEvent = self.handle_key_press
         self.main_window.mousePressEvent = self.handle_mouse_press
+        self.main_window.mouseMoveEvent = self.handle_mouse_move
+        self.main_window.mouseReleaseEvent = self.handle_mouse_release
 
     def handle_key_press(self, event):
         if event.key() == Qt.Key_Escape:
@@ -153,18 +158,43 @@ class UI:
             self.main_window.close()
 
     def handle_mouse_press(self, event):
-        if event.button() == Qt.RightButton:
+        if event.button() == Qt.LeftButton:
+            self.origin = event.pos()
+            if not self.rubber_band:
+                self.rubber_band = QRubberBand(QRubberBand.Rectangle, self.main_window)
+            self.rubber_band.setGeometry(QRect(self.origin, QSize()))
+            self.rubber_band.show()
+        elif event.button() == Qt.RightButton:
             current_time = time.time()
             if current_time - self.last_right_click_time < 0.2:
-                # Double right-click detected
-                self.sidebar_toggle_timer.stop()  # Cancel pending sidebar toggle
+                self.sidebar_toggle_timer.stop()
                 self.center_viewport()
             else:
-                # Single right-click
-                # Schedule sidebar toggle, but wait to see if there's a second click
-                self.sidebar_toggle_timer.start(200)  # 200 ms delay
-            
+                self.sidebar_toggle_timer.start(200)
             self.last_right_click_time = current_time
+
+    def handle_mouse_move(self, event):
+        if self.rubber_band and not self.rubber_band.isHidden():
+            self.rubber_band.setGeometry(QRect(self.origin, event.pos()).normalized())
+
+    def handle_mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.rubber_band:
+            self.rubber_band.hide()
+            selection_rect = self.rubber_band.geometry()
+            self.check_organisms_in_selection(selection_rect)
+
+    def check_organisms_in_selection(self, selection_rect):
+        selected_organisms = []
+        for organism in self.sim_area.sim_engine.organisms:
+            screen_x, screen_y = self.sim_area.grid_to_screen(organism.x, organism.y)
+            organism_pos = QPoint(screen_x, screen_y)
+            if selection_rect.contains(organism_pos):
+                selected_organisms.append(organism)
+
+        if selected_organisms:
+            new_test_organism = selected_organisms[0]
+            if new_test_organism != self.sim_area.sim_engine.test_organism:
+                self.sim_area.sim_engine.test_organism = new_test_organism
 
     def toggle_sidebar(self):
         if self.left_sidebar.isVisible():
@@ -245,6 +275,9 @@ class UI:
 
         self.sim_area.draw_simulation(sim_state)
         self.update_debug_info()
+
+        if self.rubber_band and not self.rubber_band.isHidden():
+            self.rubber_band.update()
 
     def center_viewport(self):
         self.sim_area.center_viewport()
