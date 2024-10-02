@@ -348,9 +348,6 @@ class Organism:
 
     def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
         """Calculate the reward based on the old and new states."""
-        if self.sim_engine.test_organism == self:
-            pass
-        
         old_organism_state = old_state.get_state(self.id)
         if old_organism_state is None:
             raise ValueError(f"Old organism state not found for ID: {self.id}")
