@@ -66,6 +66,7 @@ class DQN(ReinforcementLearningAlgorithm):
         self.q_value_history = deque(maxlen=100)
         self.target_update_counter = 0
         self.inference_update_counter = 0
+        self.learn_counter = 0
 
     def create_network(self) -> nn.Module:
         return DQNNetwork(self.input_size, self.hidden_size, self.output_size, self.hidden_layers)
@@ -144,12 +145,14 @@ class DQN(ReinforcementLearningAlgorithm):
 
         self.target_update_counter += metrics['target_update_counter']
         self.inference_update_counter += metrics['inference_update_counter']
+        self.learn_counter += 1
 
         self.organism.add_param_diff('average_reward', avg_reward)
         self.organism.add_param_diff('average_loss', avg_loss)
         self.organism.add_param_diff('average_q_value', avg_q_value)
         self.organism.add_param_diff('target_update_counter', self.target_update_counter)
         self.organism.add_param_diff('inference_update_counter', self.inference_update_counter)
+        self.organism.add_param_diff('learn_counter', self.learn_counter)
 
     def update_inference_network(self, weights: Dict[str, torch.Tensor]):
         new_inference_network = self.inference_buffer[1 - self.current_inference_buffer]

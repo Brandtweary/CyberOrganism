@@ -82,6 +82,7 @@ class Organism:
         self.focus_reward_weight: float = 1.0
         self.target_update_counter: int = 0
         self.inference_update_counter: int = 0
+        self.learn_counter: int = 0
 
         # Neural Network Hyperparameters
         self.action_mapping: Dict[int, Action] = {action.value: action for action in Action}
@@ -91,8 +92,8 @@ class Organism:
         self.hidden_layers: int = 2
         self.learning_rate: float = 0.001
         self.gamma: float = 0.9
-        self.target_update: int = 300
-        self.inference_update: int = 4
+        self.target_update: int = 50
+        self.inference_update: int = 1
         self.batch_size: int = 4
         self.capacity: int = 10000
         self.gradient_clip: float = 1.0
@@ -347,6 +348,9 @@ class Organism:
 
     def calculate_rewards(self, old_state: StateSnapshot, new_state: StateSnapshot) -> float:
         """Calculate the reward based on the old and new states."""
+        if self.sim_engine.test_organism == self:
+            pass
+        
         old_organism_state = old_state.get_state(self.id)
         if old_organism_state is None:
             raise ValueError(f"Old organism state not found for ID: {self.id}")

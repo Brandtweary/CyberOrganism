@@ -35,6 +35,7 @@ class SimulationState:
         self.deceased_organisms = self.sim_engine.deceased_organisms
         self.num_organisms = len(self.sim_engine.organisms)
         self.num_items = len(self.sim_engine.items)
+        self.all_organism_stats = {}  # Renamed from simulation_stats
 
         # Training metrics
         self.time_low_loss = 0
@@ -84,6 +85,15 @@ class SimulationState:
         self.deceased_organisms = self.sim_engine.deceased_organisms
         self.num_organisms = len(self.sim_engine.organisms)
         self.num_items = len(self.sim_engine.items)
+        
+        # Update organism counters
+        self.all_organism_stats = []
+        for organism in self.sim_engine.organisms:
+            org_id = str(organism.id)[:4]
+            org_marker = '*' if organism is self.test_organism else ''
+            stat_name = f"Organism {org_id}{org_marker}"
+            stat_value = f"{organism.RL_algorithm.target_update_counter}/{organism.RL_algorithm.inference_update_counter}/{organism.learn_counter}"
+            self.all_organism_stats.append((stat_name, stat_value))
 
     def update_training_metrics(self):
         current_loss = self.test_organism.average_loss
@@ -133,6 +143,18 @@ class SimulationState:
             ("Average Q-Value", f"{self.test_organism.average_q_value:.3f}")
         ]
 
+    def generate_simulation_stats(self):
+        stats = [
+            ("Organism Count", str(self.num_organisms)),
+            ("Item Count", str(self.num_items)),
+            ("Deceased Organisms", str(self.deceased_organisms)),
+        ]
+        
+        # Add organism stats
+        stats.extend(self.all_organism_stats)
+        
+        return stats
+    
     @staticmethod
     def format_parameter_name(name):
         if name is None:
@@ -174,7 +196,7 @@ class PerformanceUpdater(Thread):
         self.running = False
 
 class UIUpdater(QThread):
-    update_signal = Signal(list, list, list, list)
+    update_signal = Signal(list, list, list, list, list)  # Added an extra list for simulation stats
 
     def __init__(self, simulation_state):
         super().__init__()
@@ -187,17 +209,20 @@ class UIUpdater(QThread):
         while self.running:
             if self.current_section == 0:
                 organism_stats = self.simulation_state.generate_organism_stats()
-                self.update_signal.emit(organism_stats, None, None, None)
+                self.update_signal.emit(organism_stats, None, None, None, None)
             elif self.current_section == 1:
                 performance_stats = self.simulation_state.generate_performance_stats()
-                self.update_signal.emit(None, performance_stats, None, None)
-            else:  # self.current_section == 2
+                self.update_signal.emit(None, performance_stats, None, None, None)
+            elif self.current_section == 2:
                 training_stats = self.simulation_state.generate_training_stats()
                 action_distribution = self.simulation_state.action_distribution
-                self.update_signal.emit(None, None, training_stats, action_distribution)
+                self.update_signal.emit(None, None, training_stats, action_distribution, None)
+            else:  # self.current_section == 3
+                simulation_stats = self.simulation_state.generate_simulation_stats()
+                self.update_signal.emit(None, None, None, None, simulation_stats)
 
             # Move to the next section
-            self.current_section = (self.current_section + 1) % 3
+            self.current_section = (self.current_section + 1) % 4
 
             # Sleep for the update interval
             self.msleep(int(self.update_interval * 1000))

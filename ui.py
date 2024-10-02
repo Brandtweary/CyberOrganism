@@ -116,6 +116,7 @@ class UI:
         self.setup_stat_section("Organism Statistics", sidebar_layout, "organism_stats")
         self.setup_stat_section("Performance Statistics", sidebar_layout, "performance_stats")
         self.setup_stat_section("Training Statistics", sidebar_layout, "training_stats")
+        self.setup_stat_section("Simulation Statistics", sidebar_layout, "simulation_stats")
         if debug:
             self.setup_stat_section("Debug Info", sidebar_layout, "debug_info", expanded=False)  # Add this line
 
@@ -175,13 +176,15 @@ class UI:
         self.should_exit = True
         event.accept()
 
-    def update_left_sidebar(self, organism_stats, performance_stats, training_stats, action_distribution):
+    def update_left_sidebar(self, organism_stats, performance_stats, training_stats, action_distribution, simulation_stats):
         if organism_stats is not None and organism_stats:
             self.update_stat_section(organism_stats, "organism_stats")
         if performance_stats is not None and performance_stats:
             self.update_stat_section(performance_stats, "performance_stats")
         if training_stats is not None and training_stats:
             self.update_stat_section(training_stats, "training_stats")
+        if simulation_stats is not None and simulation_stats:
+            self.update_stat_section(simulation_stats, "simulation_stats")
         if action_distribution is not None and action_distribution:
             self.action_distribution_widget.update_content(action_distribution)
 
