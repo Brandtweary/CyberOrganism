@@ -83,6 +83,8 @@ class Organism:
         self.target_update_counter: int = 0
         self.inference_update_counter: int = 0
         self.learn_counter: int = 0
+        self.learning_rss_memory: float = 0.0
+        self.learning_vms_memory: float = 0.0
 
         # Neural Network Hyperparameters
         self.action_mapping: Dict[int, Action] = {action.value: action for action in Action}
@@ -443,18 +445,6 @@ class Organism:
             experiences = self.replay_buffer.sample()
             self.RL_algorithm.queue_learn(new_state, total_reward, experiences)
     
-    def record_training_metrics(self, metrics: Dict[str, Any], total_reward: float) -> None:
-        """Record and update training metrics including loss, Q-values, and rewards."""
-        self.reward_history.append(total_reward)
-        self.average_reward = sum(self.reward_history) / len(self.reward_history)
-
-        if not metrics:
-            return
-        self.loss_history.append(metrics["average_loss"])
-        self.q_value_history.append(metrics["average_q_value"])
-        self.average_loss = sum(self.loss_history) / len(self.loss_history)
-        self.average_q_value = sum(self.q_value_history) / len(self.q_value_history)
-
     def update_metabolism(self) -> Dict[str, Any]:
         """Update the organism's energy and nutrition levels, and check for reproduction."""
         self.energy -= self.energy_consumption

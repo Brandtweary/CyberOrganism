@@ -15,19 +15,9 @@ import numpy as np
 import threading
 from collections import deque
 import queue
+from summary_logger import summary_logger
+from network_factory import create_DQN_network
 
-
-class DQNNetwork(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, output_size: int, hidden_layers: int):
-        super(DQNNetwork, self).__init__()
-        layers: List[nn.Module] = [nn.Linear(input_size, hidden_size), nn.ReLU()]
-        for _ in range(hidden_layers - 1):
-            layers.extend([nn.Linear(hidden_size, hidden_size), nn.ReLU()])
-        layers.append(nn.Linear(hidden_size, output_size))
-        self.layers = nn.Sequential(*layers)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.layers(x)
 
 class DQN(ReinforcementLearningAlgorithm):
     def __init__(self, organism: Any, action_mapping: Dict[int, str], input_size: int, hidden_size: int, output_size: int, hidden_layers: int, learning_rate: float):
@@ -69,7 +59,7 @@ class DQN(ReinforcementLearningAlgorithm):
         self.learn_counter = 0
 
     def create_network(self) -> nn.Module:
-        return DQNNetwork(self.input_size, self.hidden_size, self.output_size, self.hidden_layers)
+        return create_DQN_network(self.input_size, self.hidden_size, self.output_size, self.hidden_layers)
 
     def create_optimizer(self) -> optim.Optimizer:
         return optim.AdamW(self.main_network.parameters(), lr=self.learning_rate)
@@ -78,12 +68,19 @@ class DQN(ReinforcementLearningAlgorithm):
         self.input_queue = mp.Queue()
         self.output_queue = mp.Queue()
         
+        network_params = {
+            'input_size': self.input_size,
+            'hidden_size': self.hidden_size,
+            'output_size': self.output_size,
+            'hidden_layers': self.hidden_layers
+        }
+        
         self.learning_process = learning_process.setup_learning_process(
             self.input_queue, 
             self.output_queue, 
-            self.main_network,
-            self.target_network,
-            learning_rate
+            network_params,
+            learning_rate,
+            self.organism.id
         )
     
     def cleanup(self):
@@ -118,7 +115,12 @@ class DQN(ReinforcementLearningAlgorithm):
         while True:
             try:
                 output = self.output_queue.get(timeout=0.1)
-                self._process_learning_output(output)
+                try:
+                    self._process_learning_output(output)
+                except Exception as e:
+                    print(f"Exception in _process_learning_output: {e}")
+                    self.organism.sim_engine.stop_simulation = True
+                    break
             except queue.Empty:
                 continue
 
@@ -153,6 +155,8 @@ class DQN(ReinforcementLearningAlgorithm):
         self.organism.add_param_diff('target_update_counter', self.target_update_counter)
         self.organism.add_param_diff('inference_update_counter', self.inference_update_counter)
         self.organism.add_param_diff('learn_counter', self.learn_counter)
+        self.organism.add_param_diff('learning_rss_memory', metrics['rss_memory'])
+        self.organism.add_param_diff('learning_vms_memory', metrics['vms_memory'])
 
     def update_inference_network(self, weights: Dict[str, torch.Tensor]):
         new_inference_network = self.inference_buffer[1 - self.current_inference_buffer]

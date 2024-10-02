@@ -17,6 +17,7 @@ import heapq
 class SimulationEngine:
     def __init__(self, ui):
         self.ui = ui
+        self.stop_simulation = False
         self.sim_area_widget = self.ui.sim_area
         self.sim_area_widget.sim_engine = self
         self.GRID_SIZE = 800

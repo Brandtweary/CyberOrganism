@@ -57,17 +57,17 @@ def run_simulation(sim_state):
             frame_count = 0
             last_fps_calc_time = current_time
 
-            # Regular summary every 10 seconds
-            if current_time - last_print_time >= 10.0:
-                print_simulation_summary(sim_state, frame_times)
-                last_print_time = current_time
-                frame_times = []
-            
-            if sim_state.ui.should_exit:
-                timer_thread.stop()
-                sim_state.cleanup()
-                sim_state.sim_engine.cleanup_processes()
-                event_loop.quit()
+        # Regular summary every 10 seconds
+        if current_time - last_print_time >= 10.0:
+            print_simulation_summary(sim_state, frame_times)
+            last_print_time = current_time
+            frame_times = []
+        
+        if sim_state.ui.should_exit or sim_state.sim_engine.stop_simulation:
+            timer_thread.stop()
+            sim_state.cleanup()
+            sim_state.sim_engine.cleanup_processes()
+            event_loop.quit()
 
 
     timer_thread.timeout.connect(simulation_step)
@@ -126,6 +126,10 @@ def print_simulation_summary(sim_state, frame_times):
     # Print custom profiler stats
     print("\nFunction Times:")
     print(profiler.get_performance_stats())
+    
+    # Print periodic summary for test organism
+    print("\n=== Logged Messages ===")
+    print(summary_logger.get_periodic_summary(sim_state.test_organism.id))
     
     # Reset profiler stats
     profiler.reset_stats()

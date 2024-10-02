@@ -30,6 +30,8 @@ class SimulationState:
         nvmlInit()
         self.gpu_handle = nvmlDeviceGetHandleByIndex(0)
         self.learning_backlog = 0
+        self.learning_rss_memory = 0.0
+        self.learning_vms_memory = 0.0
 
         # Simulation statistics
         self.deceased_organisms = self.sim_engine.deceased_organisms
@@ -81,7 +83,7 @@ class SimulationState:
 
     def update_performance_metrics(self):
         if not self.performance_updater.queue.empty():
-            self.cpu_usage, self.memory_usage, self.gpu_usage, self.learning_backlog = self.performance_updater.queue.get()
+            self.cpu_usage, self.memory_usage, self.gpu_usage, self.learning_backlog, self.learning_rss_memory, self.learning_vms_memory = self.performance_updater.queue.get()
 
     def update_simulation_statistics(self):
         self.deceased_organisms = self.sim_engine.deceased_organisms
@@ -121,6 +123,8 @@ class SimulationState:
             ("Deceased Organisms", str(self.deceased_organisms)),
             ("Item Count", str(self.num_items)),
             ("Learning Backlog", str(self.learning_backlog)),
+            ("RSS Memory", f"{self.learning_rss_memory / 1024:.1f} GB"),
+            ("VMS Memory", f"{self.learning_vms_memory / 1024:.1f} GB"),
             ("FPS", f"{self.framerate:.1f}"),
             ("Simulation Time", f"{int(self.total_time)} seconds")
         ]
@@ -190,8 +194,10 @@ class PerformanceUpdater(Thread):
             gpu_usage = utilization.gpu
             learning_backlog = sum(organism.RL_algorithm.get_learning_backlog() 
                                    for organism in self.simulation_state.sim_engine.organisms)
+            learning_rss_memory = sum(organism.learning_rss_memory for organism in self.simulation_state.sim_engine.organisms)
+            learning_vms_memory = sum(organism.learning_vms_memory for organism in self.simulation_state.sim_engine.organisms)
             
-            self.queue.put((cpu_usage, memory_usage, gpu_usage, learning_backlog))
+            self.queue.put((cpu_usage, memory_usage, gpu_usage, learning_backlog, learning_rss_memory, learning_vms_memory))
             time.sleep(0.25)  # Update every 250ms
 
     def stop(self):
