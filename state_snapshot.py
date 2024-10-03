@@ -283,7 +283,8 @@ class StateSnapshot:
 
     def process_spawn(self, org_id: UUID, should_spawn: bool, organism, org_state):
         if should_spawn:
-            self.sim_engine.spawn_organism(organism, self)
+            if len(self.sim_engine.organisms) < self.sim_engine.max_zoomorphs:
+                self.sim_engine.spawn_organism(organism, self)
 
     def handle_collision(self, x: float, y: float, organism) -> List[Any]:
         collision_objects = []

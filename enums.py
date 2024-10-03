@@ -22,3 +22,6 @@ class ContainerType(Enum):
     HBOX = 'hbox'
     TEXT = 'text'
 
+class RLAlgorithm(Enum):
+    DQN = 'dqn'
+

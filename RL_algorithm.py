@@ -5,7 +5,7 @@ import torch.optim as optim
 from typing import Any, Dict, Tuple
 from enums import Action
 from network_statistics import NetworkStatistics
-from state_snapshot import StateSnapshot
+from learning_process import LearningProcess
 import queue
 import threading
 import copy
@@ -26,28 +26,13 @@ class ReinforcementLearningAlgorithm(ABC):
     networks, critic networks) beyond the main network provided by this base class.
     """
 
-    def __init__(self, organism: Any, action_mapping: Dict[int, str], input_size: int, hidden_size: int, output_size: int, hidden_layers: int, learning_rate: float):
+    def __init__(self, organism: Any, action_mapping: Dict[int, str], network_params: Dict[str, Any]):
         self.organism = organism
         self.action_mapping = action_mapping
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.output_size = output_size
-        self.hidden_layers = hidden_layers
-        self.learning_rate = learning_rate
-      #  self.training_steps = random.randint(0, 30)
-        
+        self.network_params = network_params
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.main_network = self.create_network().to(self.device)
-        self.optimizer = self.create_optimizer()
-        self.network_stats = NetworkStatistics(self.main_network, self.optimizer)
-
-    @abstractmethod
-    def create_network(self) -> Any:
-        pass
-
-    @abstractmethod
-    def create_optimizer(self) -> Any:
-        pass
+        self.network_params['device'] = self.device
+        self.network_stats = NetworkStatistics()
 
     @abstractmethod
     def select_action(self, state: Any) -> Action:
@@ -57,7 +42,7 @@ class ReinforcementLearningAlgorithm(ABC):
         pass
 
     @abstractmethod
-    def _learn(self, state_snapshot: StateSnapshot) -> Dict[str, Any]:
+    def _learn(process: LearningProcess, organism_state: Dict[str, Any], experiences: Any) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], Dict[int, float]]:
         '''
         Ensure that network params are updated with the network lock
         '''

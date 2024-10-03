@@ -129,15 +129,19 @@ class Organism:
         self.param_count: int = 0
 
         # RL Neural Network Initialization
+        network_params = {
+            'input_size': self.input_size,
+            'hidden_size': self.hidden_size,
+            'output_size': self.output_size,
+            'hidden_layers': self.hidden_layers,
+            'learning_rate': self.learning_rate
+        }
+
         self.RL_algorithm: ReinforcementLearningAlgorithm = DQN(
             organism=self,
             action_mapping=self.action_mapping,
-            input_size=self.input_size,
-            hidden_size=self.hidden_size,
-            output_size=self.output_size,
-            hidden_layers=self.hidden_layers,
-            learning_rate=self.learning_rate
-        ) 
+            network_params=network_params
+        )
 
         # Thread-safe parameter diffs
         self.param_diffs = defaultdict(list)  # not being used currently, but these are for syncing params across threads

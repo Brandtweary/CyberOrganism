@@ -10,38 +10,33 @@ from enums import Action
 from RL_algorithm import ReinforcementLearningAlgorithm
 from state_snapshot import StateSnapshot
 from custom_profiler import profiler
-import learning_process
+from learning_process import setup_learning_process, LearningProcess
 import numpy as np
 import threading
 from collections import deque
 import queue
 from summary_logger import summary_logger
-from network_factory import create_DQN_network
+from network_factory import create_neural_network
+from enums import RLAlgorithm
 
 
 class DQN(ReinforcementLearningAlgorithm):
-    def __init__(self, organism: Any, action_mapping: Dict[int, str], input_size: int, hidden_size: int, output_size: int, hidden_layers: int, learning_rate: float):
-        super().__init__(organism, action_mapping, input_size, hidden_size, output_size, hidden_layers, learning_rate)
-        
-        # Main and target networks (GPU)
-        self.main_network = self.create_network().to(self.device)
-        self.target_network = self.create_network().to(self.device)
-        self.target_network.load_state_dict(self.main_network.state_dict())
-        self.target_network.eval()
+    def __init__(self, organism: Any, action_mapping: Dict[int, str], network_params: Dict[str, Any]):
+        super().__init__(organism, action_mapping, network_params)
+        self.network_params['algorithm_type'] = RLAlgorithm.DQN.value
+        self.network_params['learn'] = self._learn  # Pass the learn function
+        self.network_params['main_network'] = True
+        self.network_params['target_network'] = True
         
         # Inference network (CPU)
-        self.inference_network = self.create_network().to('cpu')
-        self.inference_network.load_state_dict(self.main_network.state_dict())
+        self.inference_network = create_neural_network(self.network_params).to('cpu')
         self.inference_network.eval()
         
         # Inference network buffer
         self.inference_buffer = [self.inference_network, copy.deepcopy(self.inference_network)]
         self.current_inference_buffer = 0
         
-        # Optimizer
-        self.optimizer = self.create_optimizer()
-        
-        self.setup_learning_process(self.learning_rate)
+        self._setup_learning_process()
 
         # Shared counter for learning backlog
         self.learning_backlog = mp.Value('i', 0)
@@ -58,28 +53,14 @@ class DQN(ReinforcementLearningAlgorithm):
         self.inference_update_counter = 0
         self.learn_counter = 0
 
-    def create_network(self) -> nn.Module:
-        return create_DQN_network(self.input_size, self.hidden_size, self.output_size, self.hidden_layers)
-
-    def create_optimizer(self) -> optim.Optimizer:
-        return optim.AdamW(self.main_network.parameters(), lr=self.learning_rate)
-
-    def setup_learning_process(self, learning_rate):
+    def _setup_learning_process(self):
         self.input_queue = mp.Queue()
         self.output_queue = mp.Queue()
         
-        network_params = {
-            'input_size': self.input_size,
-            'hidden_size': self.hidden_size,
-            'output_size': self.output_size,
-            'hidden_layers': self.hidden_layers
-        }
-        
-        self.learning_process = learning_process.setup_learning_process(
+        self.learning_process = setup_learning_process(
             self.input_queue, 
             self.output_queue, 
-            network_params,
-            learning_rate,
+            self.network_params,
             self.organism.id
         )
     
@@ -91,7 +72,7 @@ class DQN(ReinforcementLearningAlgorithm):
     def select_action(self, state: torch.Tensor) -> int:
         if random.random() < self.organism.epsilon:
             self.decay_epsilon()
-            return random.randint(0, self.output_size - 1)
+            return random.choice(list(self.action_mapping.keys()))
         else:
             with torch.no_grad():
                 with self.inference_buffer_lock:
@@ -179,5 +160,73 @@ class DQN(ReinforcementLearningAlgorithm):
         action_index = torch.multinomial(probabilities, 1).item()
         return action_index
     
-    def _learn(self, organism_state: Dict[str, Any], experiences: Any):
-        pass  # dummy implementation
+    @staticmethod
+    def _learn(process: LearningProcess, organism_state: Dict[str, Any], experiences: Any) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], Dict[int, float]]:
+        gamma = organism_state['gamma']
+        gradient_clip = organism_state['gradient_clip']
+        target_update = organism_state['target_update']
+        inference_update = organism_state['inference_update']
+
+        metrics = {}
+
+        # Unpack experiences
+        batch, idxs = experiences
+
+        # Prepare batch data
+        states, actions, rewards, next_states = zip(*batch)
+        states = torch.stack(states).to(process.device)
+        next_states = torch.stack(next_states).to(process.device)
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(process.device)
+        actions = torch.tensor(actions, dtype=torch.long).to(process.device)
+
+        # Compute Q-values for current states
+        q_values = process.main_network(states)
+        current_q_values = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+
+        with torch.no_grad():
+            # Compute Q-values for next states
+            next_q_values = process.target_network(next_states)
+            # Get maximum Q-value for next states
+            max_next_q_values = next_q_values.max(1)[0]
+
+        # Compute expected Q-values
+        expected_q_values = rewards + (gamma * max_next_q_values)
+
+        # Compute loss
+        loss = F.smooth_l1_loss(current_q_values, expected_q_values)
+
+        # Optimize the model
+        process.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(process.main_network.parameters(), max_norm=gradient_clip)
+        process.optimizer.step()
+
+        # Calculate TD errors
+        with torch.no_grad():
+            td_errors = abs(current_q_values - expected_q_values)
+        td_errors_dict = {idx: error.item() for idx, error in zip(idxs, td_errors)}
+
+        # Update target network if needed
+        process.training_steps += 1
+        target_update_counter = 0
+        inference_update_counter = 0
+        if process.training_steps % target_update == 0:
+            process.target_network.load_state_dict(process.main_network.state_dict())
+            target_update_counter += 1
+
+        # Check if inference network update is due
+        weights = None
+        if process.training_steps % inference_update == 0:
+            weights = {k: v.cpu().detach().clone() for k, v in process.main_network.state_dict().items()}
+            inference_update_counter += 1
+
+        # Update metrics
+        metrics.update({
+            "average_loss": loss.item(),
+            "average_q_value": current_q_values.mean().item(),
+            "target_update_counter": target_update_counter,
+            "inference_update_counter": inference_update_counter,
+            "training_steps": process.training_steps
+        })
+
+        return metrics, weights, td_errors_dict

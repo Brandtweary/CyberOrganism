@@ -4,9 +4,9 @@ import numpy as np
 from collections import defaultdict
 
 class NetworkStatistics:
-    def __init__(self, model, optimizer):
-        self.model = model
-        self.optimizer = optimizer
+    def __init__(self):
+        self.model = None
+        self.optimizer = None
         self.stats = defaultdict(list)
         self.last_gradients = None
         self.record_stats = {
@@ -24,6 +24,8 @@ class NetworkStatistics:
         self.set_stat_names()
 
     def set_stat_names(self):
+        if not self.model:
+            return
         for name, param in self.model.named_parameters():
             self.record_stats['gradient_stats']['stat_names'].extend([
                 f'{name}_grad_mean',
@@ -53,6 +55,8 @@ class NetworkStatistics:
         self.record_stats['layerwise_relevance']['stat_names'] = ['layerwise_relevance']
 
     def update(self, loss, inputs):
+        if not self.model:
+            return
         if self.record_stats['gradient_stats']['record']:
             self.record_gradient_stats()
         if self.record_stats['weight_update_stats']['record']:
