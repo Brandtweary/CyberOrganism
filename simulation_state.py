@@ -119,14 +119,10 @@ class SimulationState:
             ("CPU Usage", f"{self.cpu_usage:.1f}%"),
             ("Memory Usage", f"{self.memory_usage:.1f}%"),
             ("GPU Usage", f"{self.gpu_usage:.1f}%"),
-            ("Organism Count", str(self.num_organisms)),
-            ("Deceased Organisms", str(self.deceased_organisms)),
-            ("Item Count", str(self.num_items)),
             ("Learning Backlog", str(self.learning_backlog)),
             ("RSS Memory", f"{self.learning_rss_memory / 1024:.1f} GB"),
             ("VMS Memory", f"{self.learning_vms_memory / 1024:.1f} GB"),
             ("FPS", f"{self.framerate:.1f}"),
-            ("Simulation Time", f"{int(self.total_time)} seconds")
         ]
 
     def generate_network_stats(self):
@@ -154,6 +150,7 @@ class SimulationState:
             ("Organism Count", str(self.num_organisms)),
             ("Item Count", str(self.num_items)),
             ("Deceased Organisms", str(self.deceased_organisms)),
+            ("Simulation Time", f"{int(self.total_time)} seconds")
         ]
         
         # Add organism stats
