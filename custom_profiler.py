@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import gc
+import tracemalloc
 
 
 class CustomProfiler:
@@ -17,6 +18,8 @@ class CustomProfiler:
         self.gc_counts: List[Tuple[int, int, int]] = []
         self.gc_collections: List[Tuple[int, int, int]] = []
         self.last_collections: Tuple[int, int, int] = (0, 0, 0)
+        self.memory_logs: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
 
     def profile(self, func_name: str):
         def decorator(func):
@@ -55,6 +58,20 @@ class CustomProfiler:
 
     def disable(self, func_name: str):
         self.enabled_functions[func_name] = False
+
+    @contextmanager
+    def profile_memory(self, func_name: str):
+        tracemalloc.start()
+        try:
+            yield
+        finally:
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            
+            self.memory_logs[func_name].append({
+                'current': current,
+                'peak': peak
+            })
 
     def log_gc_count(self):
         count = gc.get_count()
@@ -115,6 +132,14 @@ class CustomProfiler:
 
     def get_performance_stats(self) -> str:
         output = []
+        output.extend(self.get_function_times_stats())
+        output.extend(self.get_lock_wait_times_stats())
+        output.extend(self.get_gc_totals_stats())
+        output.extend(self.get_memory_stats())
+        return "\n".join(output)
+
+    def get_function_times_stats(self) -> List[str]:
+        output = []
         for func_name, times in self.function_times.items():
             if not times:
                 continue
@@ -125,23 +150,36 @@ class CustomProfiler:
             output.append(f"  Total calls: {stats['calls']}")
             
             if func_name in self.section_times:
-                for section_name, section_times in self.section_times[func_name].items():
-                    section_stats = self.get_section_stats(func_name, section_name)
-                    output.append(f"  {section_name} section:")
-                    output.append(f"    Avg time: {section_stats['avg']*1000:.3f}ms")
-                    output.append(f"    Max time: {section_stats['max']*1000:.3f}ms (index: {section_stats['max_index']})")
-                    output.append(f"    Total calls: {section_stats['calls']}")
+                output.extend(self.get_section_times_stats(func_name))
             output.append("")
+        return output
+
+    def get_section_times_stats(self, func_name: str) -> List[str]:
+        output = []
+        for section_name, section_times in self.section_times[func_name].items():
+            section_stats = self.get_section_stats(func_name, section_name)
+            output.append(f"  {section_name} section:")
+            output.append(f"    Avg time: {section_stats['avg']*1000:.3f}ms")
+            output.append(f"    Max time: {section_stats['max']*1000:.3f}ms (index: {section_stats['max_index']})")
+            output.append(f"    Total calls: {section_stats['calls']}")
         
+        output.extend(self.get_thread_pool_times_stats())
+        return output
+
+    def get_thread_pool_times_stats(self) -> List[str]:
+        output = []
         if 'thread_pool_tasks' in self.section_times:
             execution_times = self.section_times['thread_pool_tasks']['execution_times']
             if execution_times:
-                output.append("Thread pool task execution times:")
-                output.append(f"  Avg time: {sum(execution_times) / len(execution_times) * 1000:.3f}ms")
-                output.append(f"  Max time: {max(execution_times) * 1000:.3f}ms")
-                output.append(f"  Total tasks: {len(execution_times)}")
+                output.append("  Thread pool task execution times:")
+                output.append(f"    Avg time: {sum(execution_times) / len(execution_times) * 1000:.3f}ms")
+                output.append(f"    Max time: {max(execution_times) * 1000:.3f}ms")
+                output.append(f"    Total tasks: {len(execution_times)}")
                 output.append("")
+        return output
 
+    def get_lock_wait_times_stats(self) -> List[str]:
+        output = []
         for func_name, times in self.lock_wait_times.items():
             if not times:
                 continue
@@ -151,7 +189,10 @@ class CustomProfiler:
             output.append(f"  Max wait: {stats['max']*1000:.3f}ms")
             output.append(f"  Total waits: {stats['calls']}")
             output.append("")
+        return output
 
+    def get_gc_totals_stats(self) -> List[str]:
+        output = []
         if self.gc_totals:
             avg_gc = sum(self.gc_totals) / len(self.gc_totals)
             max_gc = max(self.gc_totals)
@@ -166,8 +207,32 @@ class CustomProfiler:
             output.append(f"  Max count breakdown: {self.gc_counts[max_gc_index]}")
             output.append(f"  Max collections: {max_collections} (index: {max_collections_index})")
             output.append("")
+        return output
 
-        return "\n".join(output)
+    def get_memory_stats(self) -> List[str]:
+        output = []
+        for func_name, logs in self.memory_logs.items():
+            if not logs:
+                continue
+            
+            current_values = [log['current'] for log in logs]
+            peak_values = [log['peak'] for log in logs]
+            
+            avg_current = sum(current_values) / len(current_values)
+            max_current = max(current_values)
+            max_current_index = current_values.index(max_current)
+            
+            avg_peak = sum(peak_values) / len(peak_values)
+            max_peak = max(peak_values)
+            max_peak_index = peak_values.index(max_peak)
+            
+            output.append(f"{func_name} memory allocations:")
+            output.append(f"  Avg current: {avg_current / 1024:.2f} KB")
+            output.append(f"  Max current: {max_current / 1024:.2f} KB (index: {max_current_index})")
+            output.append(f"  Avg peak: {avg_peak / 1024:.2f} KB")
+            output.append(f"  Max peak: {max_peak / 1024:.2f} KB (index: {max_peak_index})")
+        
+        return output
 
     def reset_stats(self):
         self.function_times.clear()
@@ -176,6 +241,7 @@ class CustomProfiler:
         self.gc_totals = []
         self.gc_counts = []
         self.gc_collections = []
+        self.memory_logs.clear()
 
 # Global instance
 profiler = CustomProfiler()
@@ -183,7 +249,7 @@ profiler.disable("clone_state_snapshot")
 profiler.disable("apply_state")
 profiler.disable("get_internal_state")
 profiler.disable("calculate_nearest_items_vector")
-#profiler.disable("update_state")
+profiler.disable("update_state")
 profiler.disable("queue_learn_conditionally")
 #profiler.disable("update_simulation")
 profiler.disable("_apply_simulation_state_threaded")

@@ -1,20 +1,15 @@
 from abc import ABC, abstractmethod
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
 import torch.multiprocessing as mp
 from typing import Any, Dict, Tuple
 from enums import Action
 from network_statistics import NetworkStatistics
 from network_factory import create_neural_network
-from state_snapshot import StateSnapshot
 from custom_profiler import profiler
 import queue
 import threading
 import copy
 import numpy as np
-import random
 from collections import deque
 import time
 
@@ -49,11 +44,14 @@ class ReinforcementLearningAlgorithm(ABC):
         self.input_queue = queue.Queue()
 
         # Inference network (CPU)
-        self.inference_network = create_neural_network(self.network_params).to('cpu')
+        self.inference_network_params = self.network_params.copy()
+        self.inference_network_params['device'] = 'cpu'
+        self.inference_network = create_neural_network(self.inference_network_params)
         self.inference_network.eval()
         self.inference_buffer = [self.inference_network, copy.deepcopy(self.inference_network)]
         self.current_inference_buffer = 0
         self.inference_buffer_lock = threading.Lock()
+        self.boltzmann_probs = torch.empty(len(self.action_mapping), dtype=torch.float32)
 
         # Shared counter for learning backlog
         self.learning_backlog = mp.Value('i', 0)
@@ -152,8 +150,9 @@ class ReinforcementLearningAlgorithm(ABC):
         self.organism.epsilon = max(self.organism.epsilon_min, self.organism.epsilon * self.organism.epsilon_decay)
     
     def boltzmann_exploration(self, q_values: torch.Tensor) -> int:
-        probabilities = F.softmax(q_values / self.organism.boltzmann_temperature, dim=0)
-        action_index = torch.multinomial(probabilities, 1).item()
+        torch.div(q_values, self.organism.boltzmann_temperature, out=self.boltzmann_probs)
+        torch.softmax(self.boltzmann_probs, dim=0, out=self.boltzmann_probs)
+        action_index = torch.multinomial(self.boltzmann_probs, 1).item()
         return action_index
 
     def process_input_queue(self):

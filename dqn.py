@@ -25,18 +25,19 @@ class DQN(ReinforcementLearningAlgorithm):
 
     @profiler.profile("select_action")
     def select_action(self, state: torch.Tensor) -> int:
-        if random.random() < self.organism.epsilon:
-            self.decay_epsilon()
-            return random.choice(list(self.action_mapping.keys()))
-        else:
-            with torch.inference_mode():
-                with self.inference_buffer_lock:
-                    current_buffer = self.current_inference_buffer
-                with profiler.profile_section("select_action", "model_inference"):
-                    q_values = self.inference_buffer[current_buffer](state)
-            self.decay_epsilon()
-            with profiler.profile_section("select_action", "boltzmann_exploration"):
-                return self.boltzmann_exploration(q_values)
+        with profiler.profile_memory("select_action"):
+            if random.random() < self.organism.epsilon:
+                self.decay_epsilon()
+                return random.choice(list(self.action_mapping.keys()))
+            else:
+                with torch.inference_mode():
+                    with self.inference_buffer_lock:
+                        current_buffer = self.current_inference_buffer
+                    with profiler.profile_section("select_action", "model_inference"):
+                        q_values = self.inference_buffer[current_buffer](state)
+                self.decay_epsilon()
+                with profiler.profile_section("select_action", "boltzmann_exploration"):
+                    return self.boltzmann_exploration(q_values)
 
     def update_metrics(self, metrics):
         self.loss_history.append(metrics['average_loss'])

@@ -289,4 +289,3 @@ class SimulationEngine:
         for organism in self.organisms:
             organism.RL_algorithm.cleanup_threads()
         self.process_pool.stop()
-

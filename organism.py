@@ -12,6 +12,7 @@ from threading import Lock
 from collections import defaultdict, Counter
 import random
 from custom_profiler import profiler
+import gc
 
 
 class Organism:
@@ -297,7 +298,9 @@ class Organism:
                 internal_state = self.get_internal_state(external_state)
             
             with profiler.profile_section("update_state", "select_action"):
+               # gc.disable()  # doesn't seem to make a difference consistently
                 action_index = self.RL_algorithm.select_action(internal_state)
+               # gc.enable()
         else:
             action_index = self.last_action_index if self.last_action_index is not None else random.choice(list(self.action_mapping.keys()))
 
