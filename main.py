@@ -1,25 +1,21 @@
 from ui import UI
-from organism import Organism
 from simulation_engine import SimulationEngine
 import time
 from simulation_state import SimulationState
-from PySide6.QtCore import QTimer, QEventLoop, QCoreApplication, QThread, Signal, Slot
-import cProfile
-import pstats
-import io
-import os
-from collections import deque
+from PySide6.QtCore import QEventLoop, QThread, Signal, Slot
 from shared_resources import debug
 from summary_logger import summary_logger
 from custom_profiler import profiler
 
 
 def main():
+    from process_pool import ProcessPool
+    process_pool = ProcessPool(num_processes=4)
+    process_pool.start()
     ui = UI()
-    simulation_engine = SimulationEngine(ui)
+    simulation_engine = SimulationEngine(ui, process_pool)
     sim_state = SimulationState(simulation_engine, ui)
-    run_simulation(sim_state)
-    print_final_summary(sim_state)
+    run_simulation(sim_state) # anything placed after this will execute after the simulation has finished
 
 def run_simulation(sim_state):
     event_loop = QEventLoop()
@@ -64,9 +60,6 @@ def run_simulation(sim_state):
             frame_times = []
         
         if sim_state.ui.should_exit or sim_state.sim_engine.stop_simulation:
-            timer_thread.stop()
-            sim_state.cleanup()
-            sim_state.sim_engine.cleanup_processes()
             event_loop.quit()
 
 
@@ -78,11 +71,13 @@ def run_simulation(sim_state):
     except Exception as e:
         print(f"Simulation halted due to exception: {e}")
     finally:
-        timer_thread.stop()
-        timer_thread.wait()  # Wait for the thread to finish
-        sim_state.cleanup()
-        sim_state.sim_engine.cleanup_processes()
+        cleanup_simulation(timer_thread, sim_state)
 
+def cleanup_simulation(timer_thread, sim_state):
+    timer_thread.stop()
+    sim_state.cleanup()
+    print_final_summary(sim_state)
+    sim_state.sim_engine.cleanup()
 
 class TimerThread(QThread):
     timeout = Signal()
@@ -119,7 +114,8 @@ def print_simulation_summary(sim_state, frame_times):
     max_frame_time = max(frame_times) if frame_times else 0
     
     sim_state.avg_total_frame_times.append(avg_frame_time)
-    sim_state.max_frame_time = max(sim_state.max_frame_time, max_frame_time)
+    if sim_state.total_time > 10:
+        sim_state.max_frame_time = max(sim_state.max_frame_time, max_frame_time)
     
     print(f"Avg frame time: {avg_frame_time*1000:.2f}ms (Max: {max_frame_time*1000:.2f}ms)")
     
@@ -146,6 +142,7 @@ def print_simulation_stats(sim_state):
     print("\n--- Performance Statistics ---")
     for stat in format_stats(sim_state.generate_performance_stats()):
         print(stat)
+    print("\n Simulation time: ", str(sim_state.total_time))
     print("\n--- Network Statistics ---")
     for stat in format_stats(sim_state.generate_network_stats()):
         print(stat)

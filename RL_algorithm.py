@@ -7,7 +7,6 @@ import torch.multiprocessing as mp
 from typing import Any, Dict, Tuple
 from enums import Action
 from network_statistics import NetworkStatistics
-from learning_process import LearningProcess, setup_learning_process
 from network_factory import create_neural_network
 from state_snapshot import StateSnapshot
 from custom_profiler import profiler
@@ -17,7 +16,7 @@ import copy
 import numpy as np
 import random
 from collections import deque
-
+import time
 
 
 class ReinforcementLearningAlgorithm(ABC):
@@ -42,6 +41,10 @@ class ReinforcementLearningAlgorithm(ABC):
         self.network_params['device'] = self.device
         self.network_stats = NetworkStatistics()
 
+        self.process_pool = self.organism.sim_engine.process_pool
+        self.process_pool.register_organism(self.organism.id, self.network_params)
+        self.learn_input_queue, self.learn_output_queue = self.process_pool.get_organism_queues(self.organism.id)
+
          # Inference network (CPU)
         self.inference_network = create_neural_network(self.network_params).to('cpu')
         self.inference_network.eval()
@@ -53,16 +56,14 @@ class ReinforcementLearningAlgorithm(ABC):
         self.learning_backlog = mp.Value('i', 0)
 
         # For storing metrics
-        self.reward_history = deque(maxlen=100)
         self.loss_history = deque(maxlen=100)
         self.q_value_history = deque(maxlen=100)
         self.target_update_counter = 0
         self.inference_update_counter = 0
-        self.learn_counter = 0
-
-        self._setup_learning_process()
+        self.training_steps = 0
 
         # Thread for processing output queue
+        self.running = True
         self.output_processing_thread = threading.Thread(target=self.process_output_queue, daemon=True)
         self.output_processing_thread.start()
 
@@ -74,7 +75,7 @@ class ReinforcementLearningAlgorithm(ABC):
         pass
 
     @abstractmethod
-    def _learn(process: LearningProcess, organism_state: Dict[str, Any], experiences: Any) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], Dict[int, float]]:
+    def _learn(organism_state: Dict[str, Any], experiences: Any, training_steps: int, architecture: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], Dict[int, float]]:
         '''
         This method is implemented by the learning process and should not be called directly
         '''
@@ -87,26 +88,10 @@ class ReinforcementLearningAlgorithm(ABC):
         '''
         pass
     
-    def cleanup(self):
-        if self.learning_process:
-            self.learning_process.stop()
-            self.learning_process = None
-    
-    def _setup_learning_process(self):
-        self.input_queue = mp.Queue()
-        self.output_queue = mp.Queue()
-        
-        self.learning_process = setup_learning_process(
-            self.input_queue, 
-            self.output_queue, 
-            self.network_params,
-            self.organism.id
-        )
-    
     @profiler.profile("queue_learn")
-    def queue_learn(self, state_snapshot: StateSnapshot, total_reward: float, experiences: Any):
-        organism_state = state_snapshot.get_state(self.organism.id)
-        self.input_queue.put((organism_state.copy(), experiences, total_reward))
+    def queue_learn(self, organism_state: Dict[str, Any], experiences: Any):
+        self.training_steps += 1
+        self.learn_input_queue.put((organism_state, experiences, self.training_steps))
         
         with self.learning_backlog.get_lock():
             self.learning_backlog.value += 1
@@ -115,9 +100,9 @@ class ReinforcementLearningAlgorithm(ABC):
         return self.learning_backlog.value
 
     def process_output_queue(self):
-        while True:
+        while self.running:
             try:
-                output = self.output_queue.get(timeout=0.1)
+                output = self.learn_output_queue.get(timeout=0.1)
                 try:
                     self.process_learning_output(output)
                 except Exception as e:
@@ -125,15 +110,21 @@ class ReinforcementLearningAlgorithm(ABC):
                     self.organism.sim_engine.stop_simulation = True
                     break
             except queue.Empty:
+                time.sleep(0.01)  # Added sleep timer to prevent busy waiting
                 continue
+    
+    def cleanup_threads(self):
+        self.running = False
+        self.output_processing_thread.join()
+        self.process_pool.cleanup_organism(self.organism.id)
 
     def process_learning_output(self, output):
-        metrics, weights, td_errors, total_reward = output
+        metrics, weights, td_errors = output
 
         if weights is not None:
             self.update_inference_network(weights)
 
-        self.update_metrics(metrics, total_reward)
+        self.update_metrics(metrics)
         self.update_replay_buffer_priorities(td_errors)
 
         with self.learning_backlog.get_lock():

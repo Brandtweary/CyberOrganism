@@ -82,7 +82,6 @@ class Organism:
         self.focus_reward_weight: float = 1.0
         self.target_update_counter: int = 0
         self.inference_update_counter: int = 0
-        self.learn_counter: int = 0
         self.learning_rss_memory: float = 0.0
         self.learning_vms_memory: float = 0.0
 
@@ -108,6 +107,7 @@ class Organism:
         self.average_reward = 0.0
         self.average_loss = 0.0
         self.average_q_value = 0.0
+        self.reward_history = deque(maxlen=100)
         self.action_history = deque(maxlen=1000)
         self.action_distribution: List[Tuple[str, float]] = []
         self.action_counter = Counter()
@@ -401,6 +401,8 @@ class Organism:
         self.current_reward = 0.0
 
         self.adjust_reward_weights()
+        self.reward_history.append(reward)
+        self.average_reward = sum(self.reward_history) / len(self.reward_history)
         
         return reward
     
@@ -440,14 +442,15 @@ class Organism:
 
             self.current_experience = None
             
-            self.queue_learn_conditionally(new_state, total_reward)
+            self.queue_learn_conditionally(new_state)
 
     @profiler.profile("queue_learn_conditionally")
-    def queue_learn_conditionally(self, new_state: StateSnapshot, total_reward: float) -> None:
+    def queue_learn_conditionally(self, new_state: StateSnapshot) -> None:
         """Conditionally queue a learning task if the replay buffer can be sampled."""
         if self.replay_buffer.can_sample():
             experiences = self.replay_buffer.sample()
-            self.RL_algorithm.queue_learn(new_state, total_reward, experiences)
+            organism_state = new_state.get_state(self.id).copy()
+            self.RL_algorithm.queue_learn(organism_state, experiences)
     
     def update_metabolism(self) -> Dict[str, Any]:
         """Update the organism's energy and nutrition levels, and check for reproduction."""

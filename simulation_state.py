@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from custom_profiler import profiler
 from threading import Thread
 from queue import Queue
-from PySide6.QtCore import QThread, Signal, QObject
+from PySide6.QtCore import QThread, Signal
 
 
 
@@ -32,6 +32,7 @@ class SimulationState:
         self.learning_backlog = 0
         self.learning_rss_memory = 0.0
         self.learning_vms_memory = 0.0
+        self.process_pool_load = []
 
         # Simulation statistics
         self.deceased_organisms = self.sim_engine.deceased_organisms
@@ -83,7 +84,7 @@ class SimulationState:
 
     def update_performance_metrics(self):
         if not self.performance_updater.queue.empty():
-            self.cpu_usage, self.memory_usage, self.gpu_usage, self.learning_backlog, self.learning_rss_memory, self.learning_vms_memory = self.performance_updater.queue.get()
+            self.cpu_usage, self.memory_usage, self.gpu_usage, self.learning_backlog, self.learning_rss_memory, self.learning_vms_memory, self.process_pool_load = self.performance_updater.queue.get()
 
     def update_simulation_statistics(self):
         self.deceased_organisms = self.sim_engine.deceased_organisms
@@ -96,7 +97,7 @@ class SimulationState:
             org_id = str(organism.id)[:4]
             org_marker = '*' if organism is self.test_organism else ''
             stat_name = f"Organism {org_id}{org_marker}"
-            stat_value = f"{organism.RL_algorithm.target_update_counter}/{organism.RL_algorithm.inference_update_counter}/{organism.learn_counter}"
+            stat_value = f"{organism.RL_algorithm.target_update_counter}/{organism.RL_algorithm.inference_update_counter}/{organism.RL_algorithm.training_steps}"
             self.all_organism_stats.append((stat_name, stat_value))
 
     def update_training_metrics(self):
@@ -122,6 +123,7 @@ class SimulationState:
             ("Learning Backlog", str(self.learning_backlog)),
             ("RSS Memory", f"{self.learning_rss_memory / 1024:.1f} GB"),
             ("VMS Memory", f"{self.learning_vms_memory / 1024:.1f} GB"),
+            ("Process Pool Load", '/'.join(map(str, self.process_pool_load))),
             ("FPS", f"{self.framerate:.1f}"),
         ]
 
@@ -170,7 +172,6 @@ class SimulationState:
             self.performance_updater.join()
         if hasattr(self, 'ui_updater'):
             self.ui_updater.stop()
-            self.ui_updater.wait()
 
     def __del__(self):
         self.cleanup()
@@ -193,8 +194,9 @@ class PerformanceUpdater(Thread):
                                    for organism in self.simulation_state.sim_engine.organisms)
             learning_rss_memory = sum(organism.learning_rss_memory for organism in self.simulation_state.sim_engine.organisms)
             learning_vms_memory = sum(organism.learning_vms_memory for organism in self.simulation_state.sim_engine.organisms)
+            process_pool_load = self.simulation_state.sim_engine.process_pool.get_load()
             
-            self.queue.put((cpu_usage, memory_usage, gpu_usage, learning_backlog, learning_rss_memory, learning_vms_memory))
+            self.queue.put((cpu_usage, memory_usage, gpu_usage, learning_backlog, learning_rss_memory, learning_vms_memory, process_pool_load))
             time.sleep(0.25)  # Update every 250ms
 
     def stop(self):

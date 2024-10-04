@@ -40,5 +40,7 @@ def setup_network_architecture(network_params: Dict[str, Any]) -> Dict[str, Any]
     # Create optimizer if main_network exists
     if 'main_network' in architecture:
         architecture['optimizer'] = torch.optim.AdamW(architecture['main_network'].parameters(), lr=learning_rate)
+    
+    architecture['device'] = network_params['device']
 
     return architecture

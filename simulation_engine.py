@@ -15,8 +15,9 @@ import heapq
 
 
 class SimulationEngine:
-    def __init__(self, ui):
+    def __init__(self, ui, process_pool):
         self.ui = ui
+        self.process_pool = process_pool
         self.stop_simulation = False
         self.sim_area_widget = self.ui.sim_area
         self.sim_area_widget.sim_engine = self
@@ -260,7 +261,7 @@ class SimulationEngine:
             if obj in self.items:
                 self.items.remove(obj)
             elif obj in self.organisms:
-                obj.RL_algorithm.cleanup()
+                obj.RL_algorithm.cleanup_threads()
                 self.organisms.remove(obj)
                 self.deceased_organisms += 1
         state_snapshot.remove_state(obj_id)
@@ -284,6 +285,8 @@ class SimulationEngine:
         
         return angle
     
-    def cleanup_processes(self):
+    def cleanup(self):
         for organism in self.organisms:
-            organism.RL_algorithm.cleanup()
+            organism.RL_algorithm.cleanup_threads()
+        self.process_pool.stop()
+        

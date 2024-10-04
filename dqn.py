@@ -3,18 +3,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import random
-import copy
 from typing import Any, Dict, List, Tuple
 from enums import Action
 from RL_algorithm import ReinforcementLearningAlgorithm
 from state_snapshot import StateSnapshot
 from custom_profiler import profiler
-from learning_process import setup_learning_process, LearningProcess
 import numpy as np
-import threading
-import queue
 from summary_logger import summary_logger
-from network_factory import create_neural_network
 from enums import RLAlgorithm
 
 
@@ -40,34 +35,34 @@ class DQN(ReinforcementLearningAlgorithm):
             self.decay_epsilon()
             return self.boltzmann_exploration(q_values)
 
-    def update_metrics(self, metrics, total_reward):
-        self.reward_history.append(total_reward)
+    def update_metrics(self, metrics):
         self.loss_history.append(metrics['average_loss'])
         self.q_value_history.append(metrics['average_q_value'])
 
-        avg_reward = sum(self.reward_history) / len(self.reward_history)
         avg_loss = sum(self.loss_history) / len(self.loss_history)
         avg_q_value = sum(self.q_value_history) / len(self.q_value_history)
 
         self.target_update_counter += metrics['target_update_counter']
         self.inference_update_counter += metrics['inference_update_counter']
-        self.learn_counter += 1
 
-        self.organism.add_param_diff('average_reward', avg_reward)
         self.organism.add_param_diff('average_loss', avg_loss)
         self.organism.add_param_diff('average_q_value', avg_q_value)
         self.organism.add_param_diff('target_update_counter', self.target_update_counter)
         self.organism.add_param_diff('inference_update_counter', self.inference_update_counter)
-        self.organism.add_param_diff('learn_counter', self.learn_counter)
         self.organism.add_param_diff('learning_rss_memory', metrics['rss_memory'])
         self.organism.add_param_diff('learning_vms_memory', metrics['vms_memory'])
 
     @staticmethod
-    def _learn(process: LearningProcess, organism_state: Dict[str, Any], experiences: Any) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], Dict[int, float]]:
+    def _learn(organism_state: Dict[str, Any], experiences: Any, training_steps: int, architecture: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], Dict[int, float]]:
         gamma = organism_state['gamma']
         gradient_clip = organism_state['gradient_clip']
         target_update = organism_state['target_update']
         inference_update = organism_state['inference_update']
+
+        main_network = architecture['main_network']
+        target_network = architecture['target_network']
+        optimizer = architecture['optimizer']
+        device = architecture['device']
 
         metrics = {}
 
@@ -76,18 +71,18 @@ class DQN(ReinforcementLearningAlgorithm):
 
         # Prepare batch data
         states, actions, rewards, next_states = zip(*batch)
-        states = torch.stack(states).to(process.device)
-        next_states = torch.stack(next_states).to(process.device)
-        rewards = torch.tensor(rewards, dtype=torch.float32).to(process.device)
-        actions = torch.tensor(actions, dtype=torch.long).to(process.device)
+        states = torch.stack(states).to(device)
+        next_states = torch.stack(next_states).to(device)
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
+        actions = torch.tensor(actions, dtype=torch.long).to(device)
 
         # Compute Q-values for current states
-        q_values = process.main_network(states)
+        q_values = main_network(states)
         current_q_values = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
 
         with torch.no_grad():
             # Compute Q-values for next states
-            next_q_values = process.target_network(next_states)
+            next_q_values = target_network(next_states)
             # Get maximum Q-value for next states
             max_next_q_values = next_q_values.max(1)[0]
 
@@ -98,10 +93,10 @@ class DQN(ReinforcementLearningAlgorithm):
         loss = F.smooth_l1_loss(current_q_values, expected_q_values)
 
         # Optimize the model
-        process.optimizer.zero_grad()
+        optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(process.main_network.parameters(), max_norm=gradient_clip)
-        process.optimizer.step()
+        torch.nn.utils.clip_grad_norm_(main_network.parameters(), max_norm=gradient_clip)
+        optimizer.step()
 
         # Calculate TD errors
         with torch.no_grad():
@@ -109,17 +104,17 @@ class DQN(ReinforcementLearningAlgorithm):
         td_errors_dict = {idx: error.item() for idx, error in zip(idxs, td_errors)}
 
         # Update target network if needed
-        process.training_steps += 1
+        training_steps += 1
         target_update_counter = 0
         inference_update_counter = 0
-        if process.training_steps % target_update == 0:
-            process.target_network.load_state_dict(process.main_network.state_dict())
+        if training_steps % target_update == 0:
+            target_network.load_state_dict(main_network.state_dict())
             target_update_counter += 1
 
         # Check if inference network update is due
         weights = None
-        if process.training_steps % inference_update == 0:
-            weights = {k: v.cpu().detach().clone() for k, v in process.main_network.state_dict().items()}
+        if training_steps % inference_update == 0:
+            weights = {k: v.cpu().detach().clone() for k, v in main_network.state_dict().items()}
             inference_update_counter += 1
 
         # Update metrics
@@ -128,7 +123,7 @@ class DQN(ReinforcementLearningAlgorithm):
             "average_q_value": current_q_values.mean().item(),
             "target_update_counter": target_update_counter,
             "inference_update_counter": inference_update_counter,
-            "training_steps": process.training_steps
+            "training_steps": training_steps
         })
 
         return metrics, weights, td_errors_dict
