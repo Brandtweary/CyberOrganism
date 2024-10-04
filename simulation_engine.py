@@ -12,7 +12,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from summary_logger import summary_logger
 from custom_profiler import profiler
 import heapq
-import gc
 
 
 class SimulationEngine:
@@ -149,8 +148,6 @@ class SimulationEngine:
 
     @profiler.profile("update_simulation")
     def update_simulation(self) -> None:
-      #  profiler.log_gc_count()
-
         with profiler.profile_section("update_simulation", "clone_state_snapshot"):
             new_state: StateSnapshot = self.current_state.clone_state_snapshot()
             new_state.update_time(time.time())

@@ -29,7 +29,7 @@ class DQN(ReinforcementLearningAlgorithm):
             self.decay_epsilon()
             return random.choice(list(self.action_mapping.keys()))
         else:
-            with torch.no_grad():
+            with torch.inference_mode():
                 with self.inference_buffer_lock:
                     current_buffer = self.current_inference_buffer
                 with profiler.profile_section("select_action", "model_inference"):
