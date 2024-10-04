@@ -45,7 +45,10 @@ class ReinforcementLearningAlgorithm(ABC):
         self.process_pool.register_organism(self.organism.id, self.network_params)
         self.learn_input_queue, self.learn_output_queue = self.process_pool.get_organism_queues(self.organism.id)
 
-         # Inference network (CPU)
+        # New thread-safe queue for input processing
+        self.input_queue = queue.Queue()
+
+        # Inference network (CPU)
         self.inference_network = create_neural_network(self.network_params).to('cpu')
         self.inference_network.eval()
         self.inference_buffer = [self.inference_network, copy.deepcopy(self.inference_network)]
@@ -62,9 +65,11 @@ class ReinforcementLearningAlgorithm(ABC):
         self.inference_update_counter = 0
         self.training_steps = 0
 
-        # Thread for processing output queue
+        # Threads for processing input and output queues
         self.running = True
+        self.input_processing_thread = threading.Thread(target=self.process_input_queue, daemon=True)
         self.output_processing_thread = threading.Thread(target=self.process_output_queue, daemon=True)
+        self.input_processing_thread.start()
         self.output_processing_thread.start()
 
     @abstractmethod
@@ -88,10 +93,9 @@ class ReinforcementLearningAlgorithm(ABC):
         '''
         pass
     
-    @profiler.profile("queue_learn")
     def queue_learn(self, organism_state: Dict[str, Any], experiences: Any):
         self.training_steps += 1
-        self.learn_input_queue.put((organism_state, experiences, self.training_steps))
+        self.input_queue.put((organism_state, experiences, self.training_steps))
         
         with self.learning_backlog.get_lock():
             self.learning_backlog.value += 1
@@ -115,6 +119,7 @@ class ReinforcementLearningAlgorithm(ABC):
     
     def cleanup_threads(self):
         self.running = False
+        self.input_processing_thread.join()
         self.output_processing_thread.join()
         self.process_pool.cleanup_organism(self.organism.id)
 
@@ -150,3 +155,13 @@ class ReinforcementLearningAlgorithm(ABC):
         probabilities = F.softmax(q_values / self.organism.boltzmann_temperature, dim=0)
         action_index = torch.multinomial(probabilities, 1).item()
         return action_index
+
+    def process_input_queue(self):
+        while self.running:
+            try:
+                input_data = self.input_queue.get(block=False)
+                self.learn_input_queue.put(input_data)
+            except queue.Empty:
+                time.sleep(0.01)  # Short sleep to prevent busy waiting
+            except Exception as e:
+                print(f"Unexpected error in process_input_queue: {e}")

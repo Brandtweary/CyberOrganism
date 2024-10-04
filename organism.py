@@ -82,8 +82,6 @@ class Organism:
         self.focus_reward_weight: float = 1.0
         self.target_update_counter: int = 0
         self.inference_update_counter: int = 0
-        self.learning_rss_memory: float = 0.0
-        self.learning_vms_memory: float = 0.0
 
         # Neural Network Hyperparameters
         self.action_mapping: Dict[int, Action] = {action.value: action for action in Action}
@@ -442,15 +440,18 @@ class Organism:
 
             self.current_experience = None
             
-            self.queue_learn_conditionally(new_state)
+            with profiler.profile_section("apply_state", "queue_learn_conditionally"):
+                self.queue_learn_conditionally(new_state)
 
     @profiler.profile("queue_learn_conditionally")
     def queue_learn_conditionally(self, new_state: StateSnapshot) -> None:
         """Conditionally queue a learning task if the replay buffer can be sampled."""
-        if self.replay_buffer.can_sample():
-            experiences = self.replay_buffer.sample()
-            organism_state = new_state.get_state(self.id).copy()
-            self.RL_algorithm.queue_learn(organism_state, experiences)
+        if self.replay_buffer.can_sample(): 
+            with profiler.profile_section("queue_learn_conditionally", "sample"):
+                experiences = self.replay_buffer.sample()
+            with profiler.profile_section("queue_learn_conditionally", "queue_learn"):
+                organism_state = new_state.get_state(self.id).copy()
+                self.RL_algorithm.queue_learn(organism_state, experiences)
     
     def update_metabolism(self) -> Dict[str, Any]:
         """Update the organism's energy and nutrition levels, and check for reproduction."""

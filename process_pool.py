@@ -2,8 +2,6 @@ import torch.multiprocessing as mp
 from multiprocessing import Manager
 import threading
 from typing import Dict, Any
-import psutil
-import os
 import random
 import time
 
@@ -73,12 +71,6 @@ def _organism_thread(organism_id: str, components: Dict[str, Any], manager_dict:
                     training_steps=training_steps,
                     architecture=architecture
                 )
-
-                # Add memory usage to metrics
-                process = psutil.Process(os.getpid())
-                memory_info = process.memory_info()
-                metrics['rss_memory'] = memory_info.rss / (1024 * 1024)  # MB
-                metrics['vms_memory'] = memory_info.vms / (1024 * 1024)  # MB
 
                 learn_output_queue.put((metrics, weights, td_errors))
             else:

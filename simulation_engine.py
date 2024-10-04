@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from summary_logger import summary_logger
 from custom_profiler import profiler
 import heapq
+import gc
 
 
 class SimulationEngine:
@@ -28,7 +29,7 @@ class SimulationEngine:
         self.collision_range = 2 
         self.max_zoomorphs = 12
         self.deceased_organisms = 0
-        self.starting_organisms = 4
+        self.starting_organisms = 10
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE
@@ -148,6 +149,8 @@ class SimulationEngine:
 
     @profiler.profile("update_simulation")
     def update_simulation(self) -> None:
+      #  profiler.log_gc_count()
+
         with profiler.profile_section("update_simulation", "clone_state_snapshot"):
             new_state: StateSnapshot = self.current_state.clone_state_snapshot()
             new_state.update_time(time.time())
@@ -289,4 +292,4 @@ class SimulationEngine:
         for organism in self.organisms:
             organism.RL_algorithm.cleanup_threads()
         self.process_pool.stop()
-        
+

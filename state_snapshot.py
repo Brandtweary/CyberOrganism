@@ -6,6 +6,7 @@ from enums import ObjectType
 from summary_logger import summary_logger
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from custom_profiler import profiler
+import gc
 
 
 class StateSnapshot:
@@ -24,10 +25,20 @@ class StateSnapshot:
 
     @profiler.profile("clone_state_snapshot")
     def clone_state_snapshot(self) -> 'StateSnapshot':
-        new_snapshot = self.__class__(self.sim_engine, self._state['start_time'], self._state['grid_size'])
-        new_snapshot._state = copy.deepcopy(self._state)
-        return new_snapshot
+        with profiler.profile_section("clone_state_snapshot", "create_snapshot"):
+            new_snapshot = self.__class__(self.sim_engine, self._state['start_time'], self._state['grid_size'])
+        
+        with profiler.profile_section("clone_state_snapshot", "copy_state"):
+            # Shallow copy the top level dictionary
+            new_snapshot._state = self._state.copy()
+            
+            # Deep copy only the 'object_states' dictionary
+            new_snapshot._state['object_states'] = {
+                uuid: state.copy() for uuid, state in self._state['object_states'].items()
+            }
 
+        return new_snapshot
+        
     def get_state(self, uuid: UUID) -> Optional[Dict[str, Any]]:
         return self._state['object_states'].get(uuid)
     
@@ -61,11 +72,15 @@ class StateSnapshot:
         self._state['grid_size'] = new_grid_size
 
     def calculate_synchronized_params(self, instance: Any, state: Dict[str, Any], initial_calc: bool = False) -> List[str]:
+        '''
+        Do NOT synchronize mutable params. Instance params are only shallow copied when the snapshot is cloned.
+        We had been deepcopying before but it was slow and also causing garbage collection issues. 
+        '''
         if not hasattr(instance, 'synchronized_params') or not hasattr(instance, 'param_count') or len(state) != instance.param_count or initial_calc:
             synchronized_params = [
                 param for param, value in instance.__dict__.items()
                 if isinstance(value, (int, float, str, bool, tuple, UUID)) or 
-                (param.endswith('_ID') and value is None)
+                (param.endswith('_ID') and value is None)  # immutable params only
             ]
             instance.synchronized_params = synchronized_params
             instance.param_count = len(synchronized_params)

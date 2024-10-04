@@ -114,7 +114,7 @@ def print_simulation_summary(sim_state, frame_times):
     max_frame_time = max(frame_times) if frame_times else 0
     
     sim_state.avg_total_frame_times.append(avg_frame_time)
-    if sim_state.total_time > 10:
+    if sim_state.total_time > 11:
         sim_state.max_frame_time = max(sim_state.max_frame_time, max_frame_time)
     
     print(f"Avg frame time: {avg_frame_time*1000:.2f}ms (Max: {max_frame_time*1000:.2f}ms)")
@@ -142,7 +142,6 @@ def print_simulation_stats(sim_state):
     print("\n--- Performance Statistics ---")
     for stat in format_stats(sim_state.generate_performance_stats()):
         print(stat)
-    print("\n Simulation time: ", str(sim_state.total_time))
     print("\n--- Network Statistics ---")
     for stat in format_stats(sim_state.generate_network_stats()):
         print(stat)
@@ -152,7 +151,7 @@ def print_final_summary(sim_state):
     print("\n=== Simulation Summary ===")
     print(f"Time spent with total loss < 0.5: {sim_state.time_low_loss:.2f} seconds")
     print(f"Percentage of time with low loss: {(sim_state.time_low_loss / sim_state.total_time) * 100:.2f}%")
-    print(f"Total simulation time: {sim_state.total_time:.2f} seconds")
+    print(f"Total simulation time: {int(sim_state.total_time)} seconds")
     
     if sim_state.avg_total_frame_times:
         overall_avg_total_frame_time = sum(sim_state.avg_total_frame_times) / len(sim_state.avg_total_frame_times)

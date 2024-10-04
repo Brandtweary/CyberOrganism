@@ -1,9 +1,10 @@
 import time
 from collections import defaultdict
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from contextlib import contextmanager
 import threading
 from concurrent.futures import ThreadPoolExecutor
+import gc
 
 
 class CustomProfiler:
@@ -12,6 +13,10 @@ class CustomProfiler:
         self.section_times: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
         self.enabled_functions: Dict[str, bool] = defaultdict(lambda: True)
         self.lock_wait_times: Dict[str, List[float]] = defaultdict(list)
+        self.gc_totals: List[int] = []
+        self.gc_counts: List[Tuple[int, int, int]] = []
+        self.gc_collections: List[Tuple[int, int, int]] = []
+        self.last_collections: Tuple[int, int, int] = (0, 0, 0)
 
     def profile(self, func_name: str):
         def decorator(func):
@@ -51,13 +56,27 @@ class CustomProfiler:
     def disable(self, func_name: str):
         self.enabled_functions[func_name] = False
 
+    def log_gc_count(self):
+        count = gc.get_count()
+        self.gc_counts.append(count)
+        self.gc_totals.append(sum(count))
+
+        stats = gc.get_stats()
+        current_collections = tuple(stat['collections'] for stat in stats)
+        collections_diff = tuple(current - last for current, last in zip(current_collections, self.last_collections))
+        self.gc_collections.append(collections_diff)
+        self.last_collections = current_collections
+
     def get_stats(self, func_name: str) -> Dict[str, Any]:
         times = self.function_times[func_name]
         if not times:
             return {}
+        max_time = max(times)
+        max_index = times.index(max_time)
         return {
             'avg': sum(times) / len(times),
-            'max': max(times),
+            'max': max_time,
+            'max_index': max_index,
             'calls': len(times)
         }
 
@@ -65,9 +84,12 @@ class CustomProfiler:
         times = self.section_times[func_name][section_name]
         if not times:
             return {}
+        max_time = max(times)
+        max_index = times.index(max_time)
         return {
             'avg': sum(times) / len(times),
-            'max': max(times),
+            'max': max_time,
+            'max_index': max_index,
             'calls': len(times)
         }
 
@@ -99,7 +121,7 @@ class CustomProfiler:
             stats = self.get_stats(func_name)
             output.append(f"{func_name} performance:")
             output.append(f"  Avg time: {stats['avg']*1000:.3f}ms")
-            output.append(f"  Max time: {stats['max']*1000:.3f}ms")
+            output.append(f"  Max time: {stats['max']*1000:.3f}ms (index: {stats['max_index']})")
             output.append(f"  Total calls: {stats['calls']}")
             
             if func_name in self.section_times:
@@ -107,7 +129,7 @@ class CustomProfiler:
                     section_stats = self.get_section_stats(func_name, section_name)
                     output.append(f"  {section_name} section:")
                     output.append(f"    Avg time: {section_stats['avg']*1000:.3f}ms")
-                    output.append(f"    Max time: {section_stats['max']*1000:.3f}ms")
+                    output.append(f"    Max time: {section_stats['max']*1000:.3f}ms (index: {section_stats['max_index']})")
                     output.append(f"    Total calls: {section_stats['calls']}")
             output.append("")
         
@@ -130,25 +152,46 @@ class CustomProfiler:
             output.append(f"  Total waits: {stats['calls']}")
             output.append("")
 
+        if self.gc_totals:
+            avg_gc = sum(self.gc_totals) / len(self.gc_totals)
+            max_gc = max(self.gc_totals)
+            max_gc_index = self.gc_totals.index(max_gc)
+            
+            max_collections = max(self.gc_collections, key=sum)
+            max_collections_index = self.gc_collections.index(max_collections)
+            
+            output.append("GC Stats:")
+            output.append(f"  Avg total count: {avg_gc:.2f}")
+            output.append(f"  Max total count: {max_gc} (index: {max_gc_index})")
+            output.append(f"  Max count breakdown: {self.gc_counts[max_gc_index]}")
+            output.append(f"  Max collections: {max_collections} (index: {max_collections_index})")
+            output.append("")
+
         return "\n".join(output)
 
     def reset_stats(self):
         self.function_times.clear()
         self.section_times.clear()
         self.lock_wait_times.clear()
+        self.gc_totals = []
+        self.gc_counts = []
+        self.gc_collections = []
 
 # Global instance
 profiler = CustomProfiler()
 profiler.disable("clone_state_snapshot")
-profiler.disable("queue_learn")
 profiler.disable("apply_state")
 profiler.disable("get_internal_state")
 profiler.disable("calculate_nearest_items_vector")
-profiler.disable("update_state")
+#profiler.disable("update_state")
 profiler.disable("queue_learn_conditionally")
-profiler.disable("update_simulation")
+#profiler.disable("update_simulation")
 profiler.disable("_apply_simulation_state_threaded")
 profiler.disable("_apply_simulation_state_sequential")
 
 profiler.disable("_update_snapshot_with_objects_threaded")
 profiler.disable("_update_snapshot_with_objects_sequential")
+
+profiler.disable("update_simulation_state")
+profiler.disable("simulation_step")
+#profiler.disable("select_action")

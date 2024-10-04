@@ -23,6 +23,7 @@ class DQN(ReinforcementLearningAlgorithm):
         # Then call the superclass initializer
         super().__init__(organism, action_mapping, network_params)  # call after network params are updated
 
+    @profiler.profile("select_action")
     def select_action(self, state: torch.Tensor) -> int:
         if random.random() < self.organism.epsilon:
             self.decay_epsilon()
@@ -31,9 +32,11 @@ class DQN(ReinforcementLearningAlgorithm):
             with torch.no_grad():
                 with self.inference_buffer_lock:
                     current_buffer = self.current_inference_buffer
-                q_values = self.inference_buffer[current_buffer](state)
+                with profiler.profile_section("select_action", "model_inference"):
+                    q_values = self.inference_buffer[current_buffer](state)
             self.decay_epsilon()
-            return self.boltzmann_exploration(q_values)
+            with profiler.profile_section("select_action", "boltzmann_exploration"):
+                return self.boltzmann_exploration(q_values)
 
     def update_metrics(self, metrics):
         self.loss_history.append(metrics['average_loss'])
@@ -49,9 +52,7 @@ class DQN(ReinforcementLearningAlgorithm):
         self.organism.add_param_diff('average_q_value', avg_q_value)
         self.organism.add_param_diff('target_update_counter', self.target_update_counter)
         self.organism.add_param_diff('inference_update_counter', self.inference_update_counter)
-        self.organism.add_param_diff('learning_rss_memory', metrics['rss_memory'])
-        self.organism.add_param_diff('learning_vms_memory', metrics['vms_memory'])
-
+       
     @staticmethod
     def _learn(organism_state: Dict[str, Any], experiences: Any, training_steps: int, architecture: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], Dict[int, float]]:
         gamma = organism_state['gamma']
