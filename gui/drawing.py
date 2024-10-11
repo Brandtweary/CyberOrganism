@@ -2,7 +2,6 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QPainter, QColor, QCursor
 from PySide6.QtCore import QRectF, Qt
 from state_snapshot import ObjectType
-from shared_resources import debug
 
 class SimAreaWidget(QWidget):
     def __init__(self, FPS, parent=None):

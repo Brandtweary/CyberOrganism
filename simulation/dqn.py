@@ -8,7 +8,6 @@ from enums import Action
 from RL_algorithm import ReinforcementLearningAlgorithm
 from state_snapshot import StateSnapshot
 from custom_profiler import profiler
-import numpy as np
 from summary_logger import summary_logger
 from enums import RLAlgorithm
 

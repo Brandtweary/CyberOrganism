@@ -1,11 +1,17 @@
 # Personal files
-*.txt
+.notes/
 
-# Python virtual environment
+# Environments
 .venv/
-
-# Environment variables
 .env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+environments/*
+!environments/.gitkeep
 
 # Custom ignore files
 .cursorignore
@@ -14,10 +20,7 @@
 .archive/
 
 # Art assets
-art/
-
-# Devin's files
-devin_files/
+.art/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -86,15 +89,6 @@ celerybeat.pid
 
 # SageMath parsed files
 *.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
 
 # Spyder project settings
 .spyderproject

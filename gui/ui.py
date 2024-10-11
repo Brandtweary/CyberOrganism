@@ -4,9 +4,9 @@ from PySide6.QtGui import QFont, QColor, QPalette, QCursor, QGuiApplication, QSc
 from PySide6.QtCore import Qt, QSize, QTimer, QRect, QPoint
 from drawing import SimAreaWidget
 import time
-from shared_resources import debug
 from widgets import StatBlock, CollapsibleBox, FoldingStatBlock
 
+debug = False
 
 class UI:
     def __init__(self):
