@@ -13,6 +13,7 @@ from collections import defaultdict, Counter
 import random
 from shared.custom_profiler import profiler
 import gc
+import os
 
 
 class Organism:
@@ -296,6 +297,7 @@ class Organism:
         if self.frame_skip_counter == 0:
             with profiler.profile_section("update_state", "get_internal_state"):
                 internal_state = self.get_internal_state(external_state)
+                self.collect_dummy_states(internal_state, external_state)
             
             with profiler.profile_section("update_state", "select_action"):
                # gc.disable()  # doesn't seem to make a difference consistently
@@ -330,6 +332,12 @@ class Organism:
         
         return external_state_change
     
+    def collect_dummy_states(self, internal_state: torch.Tensor, external_state: StateSnapshot):
+        if (self.sim_engine.test_organism == self and 
+            external_state.elapsed_time <= (30*self.frame_skip) and
+            not os.path.exists(self.sim_engine.dummy_states_file)):
+            self.sim_engine.dummy_states.append(internal_state.tolist())
+   
     def calculate_action_distribution(self, action_index: int) -> None:
         """Calculate the action distribution based on the action index."""
         action_name = self.action_mapping[action_index].name

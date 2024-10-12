@@ -12,6 +12,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from shared.summary_logger import summary_logger
 from shared.custom_profiler import profiler
 import heapq
+import json
+import os
+import torch
 
 
 class SimulationEngine:
@@ -42,6 +45,10 @@ class SimulationEngine:
         self.items = []
         self.organisms = []
         self.test_organism = None
+        self.dummy_states = []
+        self.dummy_states_file = 'testing/test_data/dummy_states.json'
+        self.dummy_weights_file = 'testing/test_data/dummy_network_weights.pth'
+
         self.use_threading = False
         self.thread_pool = ThreadPoolExecutor(max_workers=64) if self.use_threading else None
 
@@ -289,3 +296,14 @@ class SimulationEngine:
         for organism in self.organisms:
             organism.RL_algorithm.cleanup_threads()
         self.process_pool.stop()
+
+        # Save dummy states to a file only if it doesn't exist
+        if self.dummy_states and not os.path.exists(self.dummy_states_file):
+            with open(self.dummy_states_file, 'w') as f:
+                json.dump(self.dummy_states, f)
+            print(f"Dummy states saved to {self.dummy_states_file}\nCount: {len(self.dummy_states)}")
+
+        # Save inference network weights of the test organism only if the file doesn't exist
+        if self.test_organism and not os.path.exists(self.dummy_weights_file):
+            torch.save(self.test_organism.RL_algorithm.inference_network.state_dict(), self.dummy_weights_file)
+            print(f"Inference network weights saved to {self.dummy_weights_file}")
