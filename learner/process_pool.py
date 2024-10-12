@@ -7,7 +7,7 @@ import time
 
 
 def _run_process(registration_queue, manager_dict):
-    from network_factory import setup_network_architecture
+    from shared.network_factory import setup_network_architecture
 
     organism_components = {}
     threads = {}

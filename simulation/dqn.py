@@ -4,12 +4,11 @@ import torch.optim as optim
 import torch.nn.functional as F
 import random
 from typing import Any, Dict, List, Tuple
-from enums import Action
+from shared.enums import Action, RLAlgorithm
+from shared.custom_profiler import profiler
+from shared.summary_logger import summary_logger
 from RL_algorithm import ReinforcementLearningAlgorithm
 from state_snapshot import StateSnapshot
-from custom_profiler import profiler
-from summary_logger import summary_logger
-from enums import RLAlgorithm
 
 
 class DQN(ReinforcementLearningAlgorithm):

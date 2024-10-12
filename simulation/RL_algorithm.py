@@ -2,10 +2,10 @@ from abc import ABC, abstractmethod
 import torch
 import torch.multiprocessing as mp
 from typing import Any, Dict, Tuple
-from enums import Action
-from network_statistics import NetworkStatistics
-from network_factory import create_neural_network
-from custom_profiler import profiler
+from shared.enums import Action
+from learner.network_statistics import NetworkStatistics
+from shared.network_factory import create_neural_network
+from shared.custom_profiler import profiler
 import queue
 import threading
 import copy

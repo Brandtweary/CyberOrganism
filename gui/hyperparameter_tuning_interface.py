@@ -1,5 +1,5 @@
-from simulation_engine import SimulationEngine
-from organism import Organism
+from simulation.simulation_engine import SimulationEngine
+from simulation.organism import Organism
 import torch
 
 class HyperparameterTuningInterface:

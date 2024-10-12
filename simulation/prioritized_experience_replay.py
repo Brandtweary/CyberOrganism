@@ -3,7 +3,7 @@ from collections import namedtuple, deque
 from typing import List, Tuple
 import random
 import threading
-from summary_logger import summary_logger
+from shared.summary_logger import summary_logger
 
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state'])
 

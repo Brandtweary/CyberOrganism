@@ -2,7 +2,7 @@ import psutil
 import time
 from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetUtilizationRates
 from concurrent.futures import ThreadPoolExecutor
-from custom_profiler import profiler
+from shared.custom_profiler import profiler
 from threading import Thread
 from queue import Queue
 from PySide6.QtCore import QThread, Signal

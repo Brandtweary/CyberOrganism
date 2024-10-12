@@ -1,7 +1,7 @@
 from uuid import UUID, uuid4
 from typing import Dict, Any, Tuple, List, Type, Callable
 from state_snapshot import StateSnapshot
-from enums import ObjectType
+from shared.enums import ObjectType
 import inspect
 from functools import lru_cache
 

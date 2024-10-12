@@ -9,8 +9,8 @@ from typing import List, Tuple, Optional, Union, Any
 from uuid import UUID
 from organism import Organism
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from summary_logger import summary_logger
-from custom_profiler import profiler
+from shared.summary_logger import summary_logger
+from shared.custom_profiler import profiler
 import heapq
 
 
@@ -26,9 +26,9 @@ class SimulationEngine:
         self.UPDATE_INTERVAL = 1.0 / ui.FPS
         self.MAX_FOOD_ITEMS = 32
         self.collision_range = 2 
-        self.max_zoomorphs = 12
+        self.max_zoomorphs = 20
         self.deceased_organisms = 0
-        self.starting_organisms = 10
+        self.starting_organisms = 4
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE

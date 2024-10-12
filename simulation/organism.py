@@ -5,13 +5,13 @@ from typing import Dict, Any, Tuple, List, Optional
 from uuid import UUID, uuid4
 from state_snapshot import StateSnapshot, ObjectType
 from prioritized_experience_replay import PrioritizedExperienceReplay, Experience
-from enums import Action
+from shared.enums import Action
 from RL_algorithm import ReinforcementLearningAlgorithm
 from dqn import DQN
 from threading import Lock
 from collections import defaultdict, Counter
 import random
-from custom_profiler import profiler
+from shared.custom_profiler import profiler
 import gc
 
 

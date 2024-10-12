@@ -1,15 +1,28 @@
-from ui import UI
-from simulation_engine import SimulationEngine
+import sys
+import os
+
+# Get the directory containing main.py
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Add project directories to the Python path
+project_dirs = ['gui', 'learner', 'shared', 'simulation']
+for dir_name in project_dirs:
+    dir_path = os.path.join(base_dir, dir_name)
+    if dir_path not in sys.path:
+        sys.path.append(dir_path)
+
+# Now you can import your modules directly
+from gui.ui import UI
+from simulation.simulation_engine import SimulationEngine
 import time
-from simulation_state import SimulationState
+from gui.simulation_state import SimulationState
 from PySide6.QtCore import QEventLoop, QThread, Signal, Slot
-from shared_resources import debug
-from summary_logger import summary_logger
-from custom_profiler import profiler
+from shared.summary_logger import summary_logger
+from shared.custom_profiler import profiler
 
 
 def main():
-    from process_pool import ProcessPool
+    from learner.process_pool import ProcessPool
     process_pool = ProcessPool(num_processes=4)
     process_pool.start()
     ui = UI()
