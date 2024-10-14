@@ -84,7 +84,7 @@ def _organism_thread(organism_id: str, components: Dict[str, Any], manager_dict:
         manager_dict.pop(f'{organism_id}_input_queue', None)
         manager_dict.pop(f'{organism_id}_output_queue', None)
 
-class ProcessPool:
+class LearnerProcessPool:
     def __init__(self, num_processes: int):
         self.num_processes = num_processes
 
