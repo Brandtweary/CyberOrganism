@@ -17,16 +17,16 @@ class UI:
         
         self.main_window = QMainWindow()
         self.should_exit = False
+        self.FPS = 30
         self.loaded = False
-        self.loading_time = 2.0
+        self.loading_frames = 2 * self.FPS  # 2 seconds of loading in ideal case
 
         # Get the primary screen
         screen = QGuiApplication.primaryScreen()
         
         # Get the screen size
         self.WIDTH, self.HEIGHT = screen.size().width(), screen.size().height()
-        self.FPS = 30
-
+        
         # Set up UI elements
         self.setup_ui()
 
@@ -265,7 +265,7 @@ class UI:
         self.update_stat_section(debug_info, "debug_info")
 
     def update(self, sim_state):
-        if sim_state.total_time <= self.loading_time:
+        if sim_state.current_state.frame_count <= self.loading_frames:
             # Keep UI elements hidden during loading
             self.hide_ui_elements()
         elif not self.loaded:

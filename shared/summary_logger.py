@@ -6,7 +6,7 @@ from threading import Lock
 class SummaryLogger:
     def __init__(self):
         self.log_levels = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG']
-        self.active_log_levels = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG']
+        self.active_log_levels = ['CRITICAL', 'ERROR', 'WARNING', 'INFO']
         self.new_logs = defaultdict(list)
         self.all_logs = defaultdict(list)
         self.new_organism_metrics = defaultdict(lambda: defaultdict(list))
@@ -16,7 +16,7 @@ class SummaryLogger:
         self.organism_metrics_lock = Lock()
         self.logs_lock = Lock()
         self.organism_logging = True
-        self.frame_logging = True
+        self.frame_logging = False
         self.periodic_logging = True
         self.final_logging = True
         self.organism_metrics_sample = True
@@ -107,7 +107,7 @@ class SummaryLogger:
 
                     summary.append(f"{metric}:")
                     summary.append(f"  Test organism max: {test_max:.4f}")
-                    summary.append(f"  Average organism max: {all_max:.4f}")
+                    summary.append(f"  All organisms max: {all_max:.4f}")
                     summary.append(f"  Difference in max: {test_max - all_max:.4f}")
                     summary.append(f"  Test organism avg: {test_avg:.4f}")
                     summary.append(f"  All organisms avg: {all_avg:.4f}")

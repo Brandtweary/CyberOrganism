@@ -15,7 +15,8 @@ class StateSnapshot:
             'grid_size': grid_size,
             'time': start_time,
             'start_time': start_time,
-            'elapsed_time': 0.0
+            'elapsed_time': 0.0,
+            'frame_count': 0
         }
         self.sim_engine = SimulationEngine
 
@@ -66,6 +67,9 @@ class StateSnapshot:
 
     def update_grid_size(self, new_grid_size: int):
         self._state['grid_size'] = new_grid_size
+    
+    def increment_frame_count(self):
+        self._state['frame_count'] += 1
 
     def calculate_synchronized_params(self, instance: Any, state: Dict[str, Any], initial_calc: bool = False) -> List[str]:
         '''
@@ -147,6 +151,10 @@ class StateSnapshot:
     def object_states(self):
         return self._state['object_states']
     
+    @property
+    def frame_count(self):
+        return self._state['frame_count']
+    
     def synchronize_param_diffs(self, objects: List[Any]):
         for obj in objects:
             if hasattr(obj, 'get_and_clear_param_diffs'):
@@ -184,7 +192,7 @@ class StateSnapshot:
             for organism in organisms:
                 internal_state = organism.get_internal_state(self)
                 if internal_state is not None:
-                    organism_states[str(organism.id)] = internal_state  # Use string representation of UUID
+                    organism_states[str(organism.id)] = internal_state
 
         with profiler.profile_section("update_snapshot_with_objects", "inference_process"):
             if organism_states:
@@ -202,9 +210,10 @@ class StateSnapshot:
             else:
                 inference_results = {}
         
-        if inference_results:
-            print(summary_logger.get_frame_log_summary())
-            pass
+        # if inference_results:
+        #     print(summary_logger.get_frame_log_summary())
+        #     print(f"Frame count: {self.frame_count}")
+        #     pass
 
         with profiler.profile_section("update_snapshot_with_objects", "get_organism_external_state_changes"):
             organism_state_changes = {}

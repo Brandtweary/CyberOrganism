@@ -65,7 +65,7 @@ class Organism:
         self.energy: float = 10.0
         self.nutrition: float = 0.0
         self.just_spawned: bool = True
-        self.frame_skip = 1
+        self.frame_skip = 4
         self.frame_skip_counter = random.randint(0, self.frame_skip - 1)  # Initialize randomly
         self.inference_skipped = False  # Used in case inference is tossed from batch, typically because organism thread did not start in time
       

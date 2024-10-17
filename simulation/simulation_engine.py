@@ -30,7 +30,7 @@ class SimulationEngine:
         self.collision_range = 2 
         self.max_zoomorphs = 20
         self.deceased_organisms = 0
-        self.starting_organisms = 4
+        self.starting_organisms = 10
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE
@@ -158,6 +158,7 @@ class SimulationEngine:
         with profiler.profile_section("update_simulation", "clone_state_snapshot"):
             new_state: StateSnapshot = self.current_state.clone_state_snapshot()
             new_state.update_time(time.time())
+            new_state.increment_frame_count()
         with profiler.profile_section("update_simulation", "update_all_objects"):
             self.update_all_objects(new_state)
         with profiler.profile_section("update_simulation", "apply_simulation_state"):
