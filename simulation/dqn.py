@@ -25,7 +25,7 @@ class DQN(ReinforcementLearningAlgorithm):
         super().__init__(organism, action_mapping, network_params)  # call after network params are updated
 
     @staticmethod
-    def _select_action(model, state, components):
+    def _select_action(model, state, components) -> Dict[str, Any]:
         network_params = components['network_params']
         epsilon = network_params['epsilon']
         epsilon_min = network_params['epsilon_min']
@@ -44,8 +44,12 @@ class DQN(ReinforcementLearningAlgorithm):
         # Decay epsilon
         new_epsilon = max(epsilon_min, epsilon * epsilon_decay)
         components['network_params']['epsilon'] = new_epsilon
+        results = {
+            'action_index': action,
+            'epsilon': new_epsilon
+        }
 
-        return action
+        return results
 
     def update_metrics(self, metrics):
         self.loss_history.append(metrics['average_loss'])

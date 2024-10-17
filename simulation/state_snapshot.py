@@ -1,5 +1,4 @@
 from typing import Dict, Any, Optional, List, Tuple, Union
-from uuid import UUID
 import math
 import copy
 from shared.enums import ObjectType
@@ -36,10 +35,10 @@ class StateSnapshot:
 
         return new_snapshot
         
-    def get_state(self, uuid: UUID) -> Optional[Dict[str, Any]]:
+    def get_state(self, uuid: str) -> Optional[Dict[str, Any]]:
         return self._state['object_states'].get(uuid)
     
-    def get_objects_in_snapshot(self, filter_type: Optional[ObjectType] = None) -> List[Tuple[UUID, Dict[str, Any]]]:
+    def get_objects_in_snapshot(self, filter_type: Optional[ObjectType] = None) -> List[Tuple[str, Dict[str, Any]]]:
         filtered_objects = []
         for uuid, state in self._state['object_states'].items():
             obj = self.sim_engine.get_object_by_ID(uuid)
@@ -52,13 +51,13 @@ class StateSnapshot:
         
         return filtered_objects
     
-    def add_state(self, uuid: UUID, state: Dict[str, Any]):
+    def add_state(self, uuid: str, state: Dict[str, Any]):
         self._state['object_states'][uuid] = state
 
-    def update_state(self, uuid: UUID, state: Dict[str, Any]):
+    def update_state(self, uuid: str, state: Dict[str, Any]):
         self._state['object_states'][uuid].update(state)
 
-    def remove_state(self, uuid: UUID):
+    def remove_state(self, uuid: str):
         self._state['object_states'].pop(uuid, None)
 
     def update_time(self, new_time: float):
@@ -76,14 +75,14 @@ class StateSnapshot:
         if not hasattr(instance, 'synchronized_params') or not hasattr(instance, 'param_count') or len(state) != instance.param_count or initial_calc:
             synchronized_params = [
                 param for param, value in instance.__dict__.items()
-                if isinstance(value, (int, float, str, bool, tuple, UUID)) or 
+                if isinstance(value, (int, float, str, bool, tuple)) or 
                 (param.endswith('_ID') and value is None)  # immutable params only
             ]
             instance.synchronized_params = synchronized_params
             instance.param_count = len(synchronized_params)
         return instance.synchronized_params
 
-    def update_state_params(self, instance: Any, uuid: UUID):
+    def update_state_params(self, instance: Any, uuid: str):
         state = self.get_state(uuid)
         initial_calc = False
         if state is None:
@@ -98,7 +97,7 @@ class StateSnapshot:
             if param not in state or state[param] != value:
                 state[param] = value
 
-    def apply_state_params(self, instance: Any, uuid: UUID):
+    def apply_state_params(self, instance: Any, uuid: str):
         state = self.get_state(uuid)
         if state is None:
             raise KeyError(f"No state found for UUID: {uuid}")
@@ -109,7 +108,7 @@ class StateSnapshot:
             if param in state:
                 setattr(instance, param, state[param])
 
-    def synchronize_new_parameter(self, instance: Any, uuid: UUID, param_name: str) -> None:
+    def synchronize_new_parameter(self, instance: Any, uuid: str, param_name: str) -> None:
         """
         This method should be used whenever a new parameter needs to be synchronized 
         between instances and state snapshots. It assumes the parameter is of a type 
@@ -193,21 +192,13 @@ class StateSnapshot:
                     self.sim_engine.inference_process.add_to_inference_queue(organism_states)
                 with profiler.profile_section("update_snapshot_with_objects", "get_inference_results"):
                     inference_results, batch_logs = self.sim_engine.inference_process.get_inference_results()
-
-                    for organism_id, logs in batch_logs.items():
-                        if organism_id == 'batch':
-                            # Handle batch logs
-                            for level, messages in logs.items():
-                                if level == 'METRICS':
-                                    # Add performance times to custom profiler
-                                    for metric, times in messages.items():
-                                        profiler.function_times[metric].extend(times)
-                                else:
-                                    # Log other messages
-                                    for message in messages:
-                                        summary_logger.log(level, message)
-                        else:
-                            summary_logger.add_organism_log(organism_id, logs)
+                    self.add_batch_logs(batch_logs)
+                    for organism_id, results in inference_results.items():  # sync any parameters changed by inference process
+                        state_update = {
+                            'epsilon': results['epsilon']
+                        }
+                        self.update_state(organism_id, state_update)
+                    
             else:
                 inference_results = {}
         
@@ -218,7 +209,7 @@ class StateSnapshot:
         with profiler.profile_section("update_snapshot_with_objects", "get_organism_external_state_changes"):
             organism_state_changes = {}
             for organism in organisms:
-                action_index = inference_results.get(str(organism.id), -1)  # Use string representation of UUID
+                action_index = inference_results.get(organism.id, {}).get('action_index', -1)
                 organism_state_changes[organism.id] = organism.get_external_state_change(action_index)
 
         with profiler.profile_section("update_snapshot_with_objects", "update_params_organisms"):
@@ -239,6 +230,19 @@ class StateSnapshot:
                 item = next(i for i in items if i.id == item_id)
                 self.process_state_change_dict(item_id, change_dict, item, self.get_state(item_id))
 
+    def add_batch_logs(self, batch_logs):
+        for organism_id, logs in batch_logs.items():
+            if organism_id == 'batch':
+                for level, messages in logs.items():
+                    if level == 'METRICS':  # assuming you used this for performance times
+                        for metric, times in messages.items():
+                            profiler.add_performance_times(metric, times)
+                    else:
+                        for message in messages:
+                            summary_logger.log(level, message)
+            else:
+                summary_logger.add_organism_log(organism_id, logs)
+    
     def batch_state_preparation(self, organisms, items):
 
         # Get nearest items for organisms
@@ -256,7 +260,7 @@ class StateSnapshot:
             organism.nearest_item_ids = nearest_item_ids
             organism.increment_frame()
 
-    def process_state_change_dict(self, obj_id: UUID, change_dict: Dict[str, Any], obj: Any, obj_state: Dict[str, Any]):
+    def process_state_change_dict(self, obj_id: str, change_dict: Dict[str, Any], obj: Any, obj_state: Dict[str, Any]):
         for key, value in change_dict.items():
             method_name = f"process_{key}"
             if hasattr(self, method_name):
@@ -268,7 +272,7 @@ class StateSnapshot:
         if spawn_food:
             item.spawn_food(self)
 
-    def process_movement_vector(self, org_id: UUID, movement_vector, organism, org_state):
+    def process_movement_vector(self, org_id: str, movement_vector, organism, org_state):
         dx, dy = movement_vector
         new_x = max(0, min(org_state['x'] + dx, self.sim_engine.world_width - 1))
         new_y = max(0, min(org_state['y'] + dy, self.sim_engine.world_height - 1))
@@ -292,7 +296,7 @@ class StateSnapshot:
                 if item_state:
                     item_state['marked_for_deletion'] = True
 
-    def process_attention_vector(self, org_id: UUID, attention_vector, organism, org_state):
+    def process_attention_vector(self, org_id: str, attention_vector, organism, org_state):
         current_org_x, current_org_y = org_state['x'], org_state['y']
         current_attention_x, current_attention_y = org_state.get('attention_x', current_org_x), org_state.get('attention_y', current_org_y)
         dx, dy = attention_vector
@@ -313,10 +317,10 @@ class StateSnapshot:
             org_state['attention_x'] = max(0, min(constrained_x, self.sim_engine.world_width - 1))
             org_state['attention_y'] = max(0, min(constrained_y, self.sim_engine.world_height - 1))
     
-    def process_alive(self, org_id: UUID, alive: bool, organism, org_state):
+    def process_alive(self, org_id: str, alive: bool, organism, org_state):
         org_state['marked_for_deletion'] = not alive
 
-    def process_spawn(self, org_id: UUID, should_spawn: bool, organism, org_state):
+    def process_spawn(self, org_id: str, should_spawn: bool, organism, org_state):
         if should_spawn:
             if len(self.sim_engine.organisms) < self.sim_engine.max_zoomorphs:
                 self.sim_engine.spawn_organism(organism, self)
@@ -334,5 +338,4 @@ class StateSnapshot:
                     collision_objects.append(obj)
         
         return collision_objects
-
 

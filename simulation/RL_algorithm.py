@@ -66,11 +66,12 @@ class ReinforcementLearningAlgorithm(ABC):
         self.output_processing_thread.start()
 
     @abstractmethod
-    def _select_action(self, state: Any) -> Action:
+    def _select_action(self, state: Any) -> Dict[str, Any]:
         '''
         This method is implemented by the inference process and should not be called directly.
         Make sure to set the select_action_dependencies in the network_params within the subclass.
         This will unpack the dependencies in the organism thread in inference_process.py.
+        If you sync more parameters in the future (via results), make sure to adjust update_snapshot_with_objects accordingly.
         '''
         pass
 
@@ -80,6 +81,7 @@ class ReinforcementLearningAlgorithm(ABC):
         This method is implemented by the learning process and should not be called directly.
         Make sure to set the learn_dependencies in the network_params within the subclass.
         This will unpack the dependencies in the organism thread in learner_process_pool.py.
+        If you sync more parameters in the future (via metrics), make sure to adjust update_metrics accordingly.
         '''
         pass
 

@@ -6,9 +6,7 @@ from food_spawners import FoodSpawner
 from collections import deque
 from state_snapshot import StateSnapshot
 from typing import List, Tuple, Optional, Union, Any
-from uuid import UUID
 from organism import Organism
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from shared.summary_logger import summary_logger
 from shared.custom_profiler import profiler
 import heapq
@@ -32,7 +30,7 @@ class SimulationEngine:
         self.collision_range = 2 
         self.max_zoomorphs = 20
         self.deceased_organisms = 0
-        self.starting_organisms = 1
+        self.starting_organisms = 4
 
         self.world_width = self.GRID_SIZE
         self.world_height = self.GRID_SIZE
@@ -193,7 +191,7 @@ class SimulationEngine:
         
         return new_organism
 
-    def get_nearest_items(self, x: int, y: int, num_items: int, detection_radius: float, state_snapshot: StateSnapshot, item_type: Optional[str] = None, return_IDs: bool = False) -> Union[List[UUID], List[Any]]:
+    def get_nearest_items(self, x: int, y: int, num_items: int, detection_radius: float, state_snapshot: StateSnapshot, item_type: Optional[str] = None, return_IDs: bool = False) -> Union[List[str], List[Any]]:
         item_class = Item if item_type is None else get_item_class(item_type)
         
         def item_distance(item):
@@ -214,26 +212,26 @@ class SimulationEngine:
         
         return [item.id for item in sorted_items] if return_IDs else sorted_items
     
-    def item_exists(self, item_id: UUID) -> bool:
+    def item_exists(self, item_id: str) -> bool:
         return any(item.id == item_id for item in self.items)
 
-    def get_item_by_ID(self, item_id: UUID) -> Optional[Any]:
+    def get_item_by_ID(self, item_id: str) -> Optional[Any]:
         for item in self.items:
             if item.id == item_id:
                 return item
         return None
 
-    def get_organism_by_ID(self, organism_id: UUID) -> Optional[Any]:
+    def get_organism_by_ID(self, organism_id: str) -> Optional[Any]:
         for organism in self.organisms:
             if organism.id == organism_id:
                 return organism
         return None
 
-    def get_object_by_ID(self, obj_id: UUID) -> Optional[Any]:
+    def get_object_by_ID(self, obj_id: str) -> Optional[Any]:
         return (self.get_item_by_ID(obj_id) or 
                 self.get_organism_by_ID(obj_id))
     
-    def remove_object(self, obj_id: UUID, state_snapshot: StateSnapshot) -> None:
+    def remove_object(self, obj_id: str, state_snapshot: StateSnapshot) -> None:
         obj = self.get_object_by_ID(obj_id)
         if obj:
             if obj in self.items:

@@ -33,6 +33,10 @@ class CustomProfiler:
                 return result
             return wrapper
         return decorator
+    
+    def add_performance_times(self, func_name: str, times: List[float]):
+        if self.enabled_functions[func_name]:
+            self.function_times[func_name].extend(times)
 
     @contextmanager
     def profile_section(self, func_name: str, section_name: str):
@@ -256,4 +260,4 @@ profiler.disable("apply_simulation_state")
 profiler.disable("update_snapshot_with_objects")
 profiler.disable("update_simulation_state")
 profiler.disable("simulation_step")
-#profiler.disable("select_action")
+#profiler.disable("inference_batch_processing")

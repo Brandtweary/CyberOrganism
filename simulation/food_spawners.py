@@ -2,7 +2,7 @@ import numpy as np
 import time
 from items import Item, register_item_class
 from food import Food
-import uuid
+
 
 @register_item_class('food_spawner')
 class FoodSpawner(Item):

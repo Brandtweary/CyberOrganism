@@ -71,17 +71,17 @@ def _run_inference_process(registration_queue, inference_input_queue, inference_
                         inference_buffer_lock.release()
                 
                 try:
-                    action_index = select_action(inference_buffer[current_buffer], state, components)
+                    organism_results = select_action(inference_buffer[current_buffer], state, components)
                 except Exception as e:
-                    batch_logs[organism_id]['ERROR'].append(f"Error selecting action for organism {organism_id}: {str(e)}")
-                    raise  # Re-raise the exception to stop execution
+                    batch_logs[organism_id]['ERROR'].append(f"Error selecting action for organism: {str(e)}")
+                    raise
 
-                batch_logs[organism_id]['INFO'].append(f"Action selected: {action_index}")
+                batch_logs[organism_id]['DEBUG'].append(f"Action selected: {organism_results['action_index']}")
 
                 with lock:
-                    results[organism_id] = action_index
+                    results[organism_id] = organism_results
                     organisms_processed += 1
-                    batch_logs[organism_id]['INFO'].append(f"Organisms processed: {organisms_processed}/{batch_size}")
+                    batch_logs[organism_id]['DEBUG'].append(f"Organisms processed: {organisms_processed}/{batch_size}")
                     end_time = time.perf_counter()
                     total_time_ms = (end_time - start_time) * 1000
                     batch_logs[organism_id]['METRICS']['inference_time_ms'].append(total_time_ms)
@@ -271,8 +271,6 @@ class InferenceProcess:
     def get_inference_results(self):
         try:
             results, batch_logs = self.inference_output_queue.get(timeout=6)
-            if not results:
-                print(f"Warning: Empty inference results.")
             return results, batch_logs
         except queue.Empty:
             print("Warning: Inference results retrieval timed out.")

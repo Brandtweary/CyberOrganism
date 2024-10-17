@@ -6,6 +6,7 @@ from threading import Lock
 class SummaryLogger:
     def __init__(self):
         self.log_levels = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG']
+        self.active_log_levels = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG']
         self.new_logs = defaultdict(list)
         self.all_logs = defaultdict(list)
         self.new_organism_metrics = defaultdict(lambda: defaultdict(list))
@@ -22,6 +23,8 @@ class SummaryLogger:
         self.test_organism_id = ''
 
     def log(self, level, message):
+        if level not in self.active_log_levels:
+            return
         with self.logs_lock:
             self.new_logs[level].append(message)
             self.all_logs[level].append(message)
@@ -64,13 +67,13 @@ class SummaryLogger:
                             # Create a single-item dict for each metric value
                             metric_dict = {metric_name: value}
                             self.log_organism_metrics(organism_id, metric_dict)
-                elif level in self.log_levels:
+                elif level in self.active_log_levels:
                     self.new_organism_logs[organism_id][level].extend(messages)
                     self.all_organism_logs[organism_id][level].extend(messages)
 
     def get_new_log_summary(self):
         summary = []
-        for level in self.log_levels:
+        for level in self.active_log_levels:
             if level in self.new_logs and self.new_logs[level]:
                 summary.append(f"\n--- {level} Messages ---")
                 summary.extend(self.new_logs[level])
@@ -80,7 +83,7 @@ class SummaryLogger:
             summary.append("\n--- Organism Logs ---")
             for organism_id, logs in self.new_organism_logs.items():
                 summary.append(f"\nOrganism {organism_id}:")
-                for level in self.log_levels:
+                for level in self.active_log_levels:
                     if level in logs and logs[level]:
                         summary.append(f"  {level}:")
                         summary.extend(f"    {msg}" for msg in logs[level])
@@ -123,7 +126,7 @@ class SummaryLogger:
 
     def get_overall_log_summary(self):
         summary = []
-        for level in self.log_levels:
+        for level in self.active_log_levels:
             if self.all_logs[level]:
                 summary.append(f"\n--- {level} Messages ---")
                 summary.extend(self.all_logs[level])
@@ -132,7 +135,7 @@ class SummaryLogger:
             summary.append("\n--- Overall Organism Logs ---")
             for organism_id, logs in self.all_organism_logs.items():
                 summary.append(f"\nOrganism {organism_id}:")
-                for level in self.log_levels:
+                for level in self.active_log_levels:
                     if level in logs and logs[level]:
                         summary.append(f"  {level}:")
                         summary.extend(f"    {msg}" for msg in logs[level])

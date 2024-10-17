@@ -7,7 +7,7 @@ from functools import lru_cache
 
 class Item:
     def __init__(self, SimulationEngine, position: Tuple[int, int]):
-        self.id = uuid4()
+        self.id: str = str(uuid4())
         self.x, self.y = position
         self.sim_engine = SimulationEngine
         self.type: ObjectType = ObjectType.ITEM

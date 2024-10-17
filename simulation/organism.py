@@ -27,7 +27,7 @@ class Organism:
     def __init__(self, SimulationEngine: Any, initial_position: Tuple[int, int]) -> None:
         """Initialize the organism with given simulation engine and starting position."""
         # Static Parameters
-        self.id: UUID = uuid4()
+        self.id: str = str(uuid4())
         self.sim_engine = SimulationEngine
         self.type: ObjectType = ObjectType.ORGANISM
         self.collision: bool = True
@@ -117,12 +117,12 @@ class Organism:
         # Current Experience (Working) Memory
         self.current_experience: Optional[Experience] = None
         self.current_reward: float = 0.0
-        self.nearest_item_ID: Optional[UUID] = None
-        self.nearest_item_ids: List[UUID] = []
+        self.nearest_item_ID: Optional[str] = None
+        self.nearest_item_ids: List[str] = []
         self.last_internal_state: Optional[torch.Tensor] = None
 
         # Long-Term Memory
-        self.item_memory: List[UUID] = []
+        self.item_memory: List[str] = []
         self.replay_buffer = PrioritizedExperienceReplay(capacity=self.capacity, batch_size=self.batch_size)
         self.replay_buffer_size: int = 0
 
@@ -221,13 +221,13 @@ class Organism:
         self.organism_attention_distance = self.sim_engine.calculate_distance(self.x, self.y, self.attention_x, self.attention_y, normalize_to_viewport=True)
         self.organism_attention_direction = self.sim_engine.calculate_angle(self.x, self.y, self.attention_x, self.attention_y, normalize=True)
 
-    def update_item_memory(self, nearest_item_ids: List[UUID]) -> None:
+    def update_item_memory(self, nearest_item_ids: List[str]) -> None:
         """Update the item_memory list with new unique IDs."""
         for item_id in nearest_item_ids:
             if item_id not in self.item_memory:
                 self.item_memory.append(item_id)
 
-    def get_item_from_memory(self, organism_x: float, organism_y: float, external_state: StateSnapshot) -> List[Optional[UUID]]:
+    def get_item_from_memory(self, organism_x: float, organism_y: float, external_state: StateSnapshot) -> List[Optional[str]]:
         """Retrieve the nearest remembered item that still exists."""
         memory_copy = self.item_memory.copy()
         nearest_item = None
