@@ -65,8 +65,9 @@ class Organism:
         self.energy: float = 10.0
         self.nutrition: float = 0.0
         self.just_spawned: bool = True
-        self.frame_skip = 4  # Skip 3 out of 4 frames
+        self.frame_skip = 1
         self.frame_skip_counter = random.randint(0, self.frame_skip - 1)  # Initialize randomly
+        self.inference_skipped = False  # Used in case inference is tossed from batch, typically because organism thread did not start in time
       
         # Organismal Parameters
         self.movement_speed: float = 1.0
@@ -98,8 +99,8 @@ class Organism:
         self.batch_size: int = 4
         self.capacity: int = 10000
         self.gradient_clip: float = 1.0
-        self.epsilon: float = 0.8
-        self.epsilon_min: float = 0.01
+        self.epsilon: float = 0.0
+        self.epsilon_min: float = 0.00
         self.epsilon_decay: float = 0.999
         self.boltzmann_temperature: float = 0.2
 
@@ -118,6 +119,7 @@ class Organism:
         self.current_reward: float = 0.0
         self.nearest_item_ID: Optional[UUID] = None
         self.nearest_item_ids: List[UUID] = []
+        self.last_internal_state: Optional[torch.Tensor] = None
 
         # Long-Term Memory
         self.item_memory: List[UUID] = []
@@ -134,7 +136,11 @@ class Organism:
             'hidden_size': self.hidden_size,
             'output_size': self.output_size,
             'hidden_layers': self.hidden_layers,
-            'learning_rate': self.learning_rate
+            'learning_rate': self.learning_rate,
+            'epsilon': self.epsilon,
+            'epsilon_min': self.epsilon_min,
+            'epsilon_decay': self.epsilon_decay,
+            'boltzmann_temperature': self.boltzmann_temperature
         }
 
         self.RL_algorithm: ReinforcementLearningAlgorithm = DQN(
@@ -161,22 +167,13 @@ class Organism:
             self.current_nearest_items = self.start_nearest_items + math.floor(progress * (self.max_nearest_items - self.start_nearest_items))
         else:
             self.current_nearest_items = self.max_nearest_items
-
-    @profiler.profile("get_internal_state")
-    def get_internal_state(self, external_state: StateSnapshot) -> torch.Tensor:
-        """Compute and return the internal state of the organism."""
-        self.adjust_input_sensors(external_state)
-        with profiler.profile_section("get_internal_state", "calculate_nearest_items_vector"):
-            nearest_items_vector = self.calculate_nearest_items_vector(external_state)
-        with profiler.profile_section("get_internal_state", "calculate_attention_item_parameters"):
-            self.calculate_attention_item_parameters(external_state)
-        with profiler.profile_section("get_internal_state", "calculate_organism_attention_parameters"):
-            self.calculate_organism_attention_parameters()
-
-        state = [getattr(self, param) for param in self.input_parameters]
-        state.extend(nearest_items_vector)
-
-        return torch.tensor(state, dtype=torch.float32)
+    
+    def increment_frame(self) -> None:
+        if self.just_spawned == True:
+            self.just_spawned = False
+        if self.inference_skipped == True:
+            self.inference_skipped = False
+        self.frame_skip_counter = (self.frame_skip_counter + 1) % self.frame_skip
 
     @profiler.profile("calculate_nearest_items_vector")
     def calculate_nearest_items_vector(self, external_state: StateSnapshot) -> List[float]:
@@ -288,28 +285,40 @@ class Organism:
         else:
             return 0, 0
 
-    @profiler.profile("update_state")
-    def update_state(self, external_state: StateSnapshot) -> Dict[str, Any]:
-        """Update the organism's state and return the changes to be applied externally."""
-        self.just_spawned = False
-        self.frame_skip_counter = (self.frame_skip_counter + 1) % self.frame_skip
+    @profiler.profile("get_internal_state")
+    def get_internal_state(self, external_state: StateSnapshot) -> Optional[torch.Tensor]:
+        """Compute and return the internal state of the organism."""
+        if self.frame_skip_counter != 0:
+            return None
 
-        if self.frame_skip_counter == 0:
-            with profiler.profile_section("update_state", "get_internal_state"):
-                internal_state = self.get_internal_state(external_state)
-                self.collect_dummy_states(internal_state, external_state)
-            
-            with profiler.profile_section("update_state", "select_action"):
-               # gc.disable()  # doesn't seem to make a difference consistently
-                action_index = self.RL_algorithm.select_action(internal_state)
-               # gc.enable()
-        else:
+        self.adjust_input_sensors(external_state)
+        with profiler.profile_section("get_internal_state", "calculate_nearest_items_vector"):
+            nearest_items_vector = self.calculate_nearest_items_vector(external_state)
+        with profiler.profile_section("get_internal_state", "calculate_attention_item_parameters"):
+            self.calculate_attention_item_parameters(external_state)
+        with profiler.profile_section("get_internal_state", "calculate_organism_attention_parameters"):
+            self.calculate_organism_attention_parameters()
+
+        state = [getattr(self, param) for param in self.input_parameters]
+        state.extend(nearest_items_vector)
+
+        internal_state = torch.tensor(state, dtype=torch.float32)
+        self.collect_dummy_states(internal_state, external_state)
+        
+        self.last_internal_state = internal_state
+
+        return internal_state
+    
+    @profiler.profile("get_external_state_change")
+    def get_external_state_change(self, action_index: int) -> Dict[str, Any]:
+        if action_index == -1: # frame was skipped or organism removed from inference process batch
             action_index = self.last_action_index if self.last_action_index is not None else random.choice(list(self.action_mapping.keys()))
+            self.inference_skipped = True
 
-        with profiler.profile_section("update_state", "calculate_action_distribution"):
+        with profiler.profile_section("get_external_state_change", "calculate_action_distribution"):
             self.calculate_action_distribution(action_index)
 
-        with profiler.profile_section("update_state", "action_processing"):
+        with profiler.profile_section("get_external_state_change", "action_processing"):
             attention_vector = self.update_attention_point(action_index)
             movement_vector = self.move(attention_vector)
             
@@ -321,16 +330,42 @@ class Organism:
             metabolism_changes = self.update_metabolism()
             external_state_change.update(metabolism_changes)
             
-            if self.frame_skip_counter == 0:
+            if not self.inference_skipped:
                 # Only store experience on active frames
                 self.current_experience = Experience(
-                    state=internal_state,
+                    state=self.last_internal_state.clone().detach(),
                     action=action_index,
-                    reward=None, 
+                    reward=None,
                     next_state=None
                 )
         
         return external_state_change
+    
+    @profiler.profile("apply_state")
+    def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
+        """Apply the new state, calculate rewards, and potentially queue learning."""
+        if self.just_spawned or self.inference_skipped:
+            return
+
+        with profiler.profile_section("apply_state", "internal_processing"):
+            total_reward = self.calculate_rewards(old_state, new_state)
+            new_internal_state = self.get_internal_state(new_state)
+        
+        with profiler.profile_section("apply_state", "replay_buffer"):
+            if self.current_experience:
+                updated_experience = Experience(
+                    state=self.current_experience.state,
+                    action=self.current_experience.action,
+                    reward=total_reward,
+                    next_state=new_internal_state
+                )
+                self.replay_buffer.add(updated_experience)
+                self.replay_buffer_size = self.replay_buffer.get_tree_size()
+
+        self.current_experience = None
+        
+        with profiler.profile_section("apply_state", "queue_learn_conditionally"):
+            self.queue_learn_conditionally(new_state)
     
     def collect_dummy_states(self, internal_state: torch.Tensor, external_state: StateSnapshot):
         if (self.sim_engine.test_organism == self and 
@@ -426,34 +461,6 @@ class Organism:
         reward = 0.5 * math.cos(normalized_angle)
         return reward
 
-    @profiler.profile("apply_state")
-    def apply_state(self, old_state: StateSnapshot, new_state: StateSnapshot) -> None:
-        """Apply the new state, calculate rewards, and potentially queue learning."""
-        if self.just_spawned:
-            return  # organism is not in the old state, so the following code would throw an error
-
-        if self.frame_skip_counter == 0:
-            with profiler.profile_section("apply_state", "internal_processing"):
-                total_reward = self.calculate_rewards(old_state, new_state)
-                new_internal_state = self.get_internal_state(new_state)
-            
-            
-            with profiler.profile_section("apply_state", "replay_buffer"):
-                if self.current_experience:
-                    updated_experience = Experience(
-                        state=self.current_experience.state,
-                        action=self.current_experience.action,
-                        reward=total_reward,
-                        next_state=new_internal_state
-                    )
-                    self.replay_buffer.add(updated_experience)
-                    self.replay_buffer_size = self.replay_buffer.get_tree_size()
-
-            self.current_experience = None
-            
-            with profiler.profile_section("apply_state", "queue_learn_conditionally"):
-                self.queue_learn_conditionally(new_state)
-
     @profiler.profile("queue_learn_conditionally")
     def queue_learn_conditionally(self, new_state: StateSnapshot) -> None:
         """Conditionally queue a learning task if the replay buffer can be sampled."""
@@ -493,3 +500,4 @@ class Organism:
             diffs = dict(self.param_diffs)
             self.param_diffs.clear()
         return diffs
+

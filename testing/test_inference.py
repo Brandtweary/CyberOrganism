@@ -79,6 +79,12 @@ def load_dummy_weights(networks: List[torch.nn.Module], weights_file: str):
     print(f"Loaded weights from {weights_file} to {len(networks)} networks")
 
 def main():
+    """
+    Main function to run the inference test. If state tensors are the wrong size for the network,
+    delete the dummy states, re-run the simulation for a minimum of 120 seconds (30 * frame skip value),
+    and try again. If the weights can't be loaded into the network, adjust the network params to reflect
+    the current network architecture of the organism.
+    """
     network_params = setup_network_params()
     num_organisms = 20
     networks = [create_neural_network(network_params) for _ in range(num_organisms)]

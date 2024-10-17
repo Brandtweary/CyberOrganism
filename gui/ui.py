@@ -194,7 +194,7 @@ class UI:
         if selected_organisms:
             new_test_organism = selected_organisms[0]
             if new_test_organism != self.sim_area.sim_engine.test_organism:
-                self.sim_area.sim_engine.test_organism = new_test_organism
+                self.sim_area.sim_engine.set_test_organism(new_test_organism)
 
     def toggle_sidebar(self):
         if self.left_sidebar.isVisible():

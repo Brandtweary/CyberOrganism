@@ -3,7 +3,7 @@ import torch
 import torch.multiprocessing as mp
 from typing import Any, Dict, Tuple
 from shared.enums import Action
-from learner.network_statistics import NetworkStatistics
+from learning.network_statistics import NetworkStatistics
 from shared.network_factory import create_neural_network
 from shared.custom_profiler import profiler
 import queue
@@ -36,22 +36,17 @@ class ReinforcementLearningAlgorithm(ABC):
         self.network_params['device'] = self.device
         self.network_stats = NetworkStatistics()
 
-        self.process_pool = self.organism.sim_engine.process_pool
-        self.process_pool.register_organism(self.organism.id, self.network_params)
-        self.learn_input_queue, self.learn_output_queue = self.process_pool.get_organism_queues(self.organism.id)
+        self.learner_process_pool = self.organism.sim_engine.learner_process_pool
+        self.learner_process_pool.register_organism(str(self.organism.id), self.network_params)
+        self.learn_input_queue, self.learn_output_queue = self.learner_process_pool.get_organism_queues(str(self.organism.id))
+
+        self.inference_network_params = self.network_params.copy()
+        self.inference_network_params['device'] = 'cpu'
+        self.inference_process = self.organism.sim_engine.inference_process
+        self.inference_process.register_organism(str(self.organism.id), self.inference_network_params)
 
         # New thread-safe queue for input processing
         self.input_queue = queue.Queue()
-
-        # Inference network (CPU)
-        self.inference_network_params = self.network_params.copy()
-        self.inference_network_params['device'] = 'cpu'
-        self.inference_network = create_neural_network(self.inference_network_params)
-        self.inference_network.eval()
-        self.inference_buffer = [self.inference_network, copy.deepcopy(self.inference_network)]
-        self.current_inference_buffer = 0
-        self.inference_buffer_lock = threading.Lock()
-        self.boltzmann_probs = torch.empty(len(self.action_mapping), dtype=torch.float32)
 
         # Shared counter for learning backlog
         self.learning_backlog = mp.Value('i', 0)
@@ -71,16 +66,20 @@ class ReinforcementLearningAlgorithm(ABC):
         self.output_processing_thread.start()
 
     @abstractmethod
-    def select_action(self, state: Any) -> Action:
+    def _select_action(self, state: Any) -> Action:
         '''
-        Ensure that the action is selected with the inference buffer lock
+        This method is implemented by the inference process and should not be called directly.
+        Make sure to set the select_action_dependencies in the network_params within the subclass.
+        This will unpack the dependencies in the organism thread in inference_process.py.
         '''
         pass
 
     @abstractmethod
     def _learn(organism_state: Dict[str, Any], experiences: Any, training_steps: int, architecture: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], Dict[int, float]]:
         '''
-        This method is implemented by the learning process and should not be called directly
+        This method is implemented by the learning process and should not be called directly.
+        Make sure to set the learn_dependencies in the network_params within the subclass.
+        This will unpack the dependencies in the organism thread in learner_process_pool.py.
         '''
         pass
 
@@ -119,7 +118,7 @@ class ReinforcementLearningAlgorithm(ABC):
         self.running = False
         self.input_processing_thread.join()
         self.output_processing_thread.join()
-        self.process_pool.cleanup_organism(self.organism.id)
+        self.learner_process_pool.cleanup_organism(str(self.organism.id))
 
     def process_learning_output(self, output):
         metrics, weights, td_errors = output
@@ -134,26 +133,12 @@ class ReinforcementLearningAlgorithm(ABC):
             self.learning_backlog.value -= 1
     
     def update_inference_network(self, weights: Dict[str, torch.Tensor]):
-        new_inference_network = self.inference_buffer[1 - self.current_inference_buffer]
-        new_inference_network.load_state_dict(weights)
-        new_inference_network.to('cpu')
-        new_inference_network.eval()
-        with self.inference_buffer_lock:
-            self.current_inference_buffer = 1 - self.current_inference_buffer
+        self.inference_process.update_weights(str(self.organism.id), weights)
 
     def update_replay_buffer_priorities(self, td_errors_dict: Dict[int, float]):
         idxs = list(td_errors_dict.keys())
         priorities = np.array(list(td_errors_dict.values()))
         self.organism.replay_buffer.update_priorities(idxs, priorities)
-
-    def decay_epsilon(self):
-        self.organism.epsilon = max(self.organism.epsilon_min, self.organism.epsilon * self.organism.epsilon_decay)
-    
-    def boltzmann_exploration(self, q_values: torch.Tensor) -> int:
-        torch.div(q_values, self.organism.boltzmann_temperature, out=self.boltzmann_probs)
-        torch.softmax(self.boltzmann_probs, dim=0, out=self.boltzmann_probs)
-        action_index = torch.multinomial(self.boltzmann_probs, 1).item()
-        return action_index
 
     def process_input_queue(self):
         while self.running:

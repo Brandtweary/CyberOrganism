@@ -15,27 +15,37 @@ class DQN(ReinforcementLearningAlgorithm):
     def __init__(self, organism: Any, action_mapping: Dict[int, str], network_params: Dict[str, Any]):
         network_params['algorithm_type'] = RLAlgorithm.DQN.value
         network_params['learn'] = self._learn  # Pass the learn function
+        network_params['select_action'] = self._select_action
         network_params['main_network'] = True
         network_params['target_network'] = True
-        
+        network_params['select_action_dependencies'] = ['torch', 'torch.nn.functional', 'random']
+        network_params['learn_dependencies'] = ['torch', 'torch.nn.functional']
+
         # Then call the superclass initializer
         super().__init__(organism, action_mapping, network_params)  # call after network params are updated
 
-    @profiler.profile("select_action")
-    def select_action(self, state: torch.Tensor) -> int:
-        with profiler.profile_memory("select_action"):
-            if random.random() < self.organism.epsilon:
-                self.decay_epsilon()
-                return random.choice(list(self.action_mapping.keys()))
-            else:
-                with torch.inference_mode():
-                    with self.inference_buffer_lock:
-                        current_buffer = self.current_inference_buffer
-                    with profiler.profile_section("select_action", "model_inference"):
-                        q_values = self.inference_buffer[current_buffer](state)
-                self.decay_epsilon()
-                with profiler.profile_section("select_action", "boltzmann_exploration"):
-                    return self.boltzmann_exploration(q_values)
+    @staticmethod
+    def _select_action(model, state, components):
+        network_params = components['network_params']
+        epsilon = network_params['epsilon']
+        epsilon_min = network_params['epsilon_min']
+        epsilon_decay = network_params['epsilon_decay']
+        boltzmann_temperature = network_params['boltzmann_temperature']
+
+        if random.random() < epsilon:
+            action = random.choice(range(network_params['output_size']))
+        else:
+            with torch.inference_mode():
+                q_values = model(state)
+            # Boltzmann exploration
+            probs = F.softmax(q_values / boltzmann_temperature, dim=-1)
+            action = torch.multinomial(probs, 1).item()
+
+        # Decay epsilon
+        new_epsilon = max(epsilon_min, epsilon * epsilon_decay)
+        components['network_params']['epsilon'] = new_epsilon
+
+        return action
 
     def update_metrics(self, metrics):
         self.loss_history.append(metrics['average_loss'])
@@ -71,11 +81,13 @@ class DQN(ReinforcementLearningAlgorithm):
 
         # Prepare batch data
         states, actions, rewards, next_states = zip(*batch)
+
         states = torch.stack(states).to(device)
         next_states = torch.stack(next_states).to(device)
         rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
         actions = torch.tensor(actions, dtype=torch.long).to(device)
 
+        
         # Compute Q-values for current states
         q_values = main_network(states)
         current_q_values = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)

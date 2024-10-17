@@ -19,9 +19,6 @@ class StateSnapshot:
             'elapsed_time': 0.0
         }
         self.sim_engine = SimulationEngine
-        self.use_threading = False
-        if self.use_threading:
-            self.thread_pool = ThreadPoolExecutor(max_workers=64)
 
     @profiler.profile("clone_state_snapshot")
     def clone_state_snapshot(self) -> 'StateSnapshot':
@@ -167,63 +164,85 @@ class StateSnapshot:
                             new_value = diff_list[-1]
                         setattr(obj, param_name, new_value)
 
-    def update_snapshot_with_objects(self, objects: List[Any]):
-        if self.use_threading:
-            self._update_snapshot_with_objects_threaded(objects)
-        else:
-            self._update_snapshot_with_objects_sequential(objects)
+    @profiler.profile("update_snapshot_with_objects")
+    def update_snapshot_with_objects(self, organisms: List[Any], items: List[Any]):
+        with profiler.profile_section("update_snapshot_with_objects", "synchronize_param_diffs_organisms"):
+            self.synchronize_param_diffs(organisms)
 
-    @profiler.profile("_update_snapshot_with_objects_threaded")
-    def _update_snapshot_with_objects_threaded(self, objects):  
-        self.synchronize_param_diffs(objects)
-        self.batch_state_preparation(objects)
+        with profiler.profile_section("update_snapshot_with_objects", "synchronize_param_diffs_items"):
+            self.synchronize_param_diffs(items)
 
-        future_to_obj = {
-            self.thread_pool.submit(obj.update_state, self): obj 
-            for obj in objects
-        }
-        state_changes = {}
-        for future in as_completed(future_to_obj):
-            obj = future_to_obj[future]
-            try:
-                state_changes[obj.id] = future.result()
-            except Exception as exc:
-                summary_logger.error(f"Object {obj.id} generated an exception: {exc}")
+        with profiler.profile_section("update_snapshot_with_objects", "batch_state_preparation"):
+            self.batch_state_preparation(organisms, items)
 
-        with profiler.profile_section("_update_snapshot_with_objects_threaded", "post_processing"):
-            for obj in objects:
-                self.update_state_params(obj, obj.id)
+        with profiler.profile_section("update_snapshot_with_objects", "update_item_states"): 
+            item_state_changes = {}
+            for item in items:
+                item_state_changes[item.id] = item.update_state(self)
 
-            for obj_id, change_dict in state_changes.items():
-                obj = next(o for o in objects if o.id == obj_id)
-                self.process_state_change_dict(obj_id, change_dict, obj, self.get_state(obj_id))
+        with profiler.profile_section("update_snapshot_with_objects", "get_organism_internal_states"):
+            organism_states = {}
+            for organism in organisms:
+                internal_state = organism.get_internal_state(self)
+                if internal_state is not None:
+                    organism_states[str(organism.id)] = internal_state  # Use string representation of UUID
 
-    @profiler.profile("_update_snapshot_with_objects_sequential")
-    def _update_snapshot_with_objects_sequential(self, objects):
-        with profiler.profile_section("_update_snapshot_with_objects_sequential", "synchronize_param_diffs"):
-            self.synchronize_param_diffs(objects)
+        with profiler.profile_section("update_snapshot_with_objects", "inference_process"):
+            if organism_states:
+                with profiler.profile_section("update_snapshot_with_objects", "add_to_inference_queue"):
+                    self.sim_engine.inference_process.add_to_inference_queue(organism_states)
+                with profiler.profile_section("update_snapshot_with_objects", "get_inference_results"):
+                    inference_results, batch_logs = self.sim_engine.inference_process.get_inference_results()
 
-        with profiler.profile_section("_update_snapshot_with_objects_sequential", "batch_state_preparation"):
-            self.batch_state_preparation(objects)
+                    for organism_id, logs in batch_logs.items():
+                        if organism_id == 'batch':
+                            # Handle batch logs
+                            for level, messages in logs.items():
+                                if level == 'METRICS':
+                                    # Add performance times to custom profiler
+                                    for metric, times in messages.items():
+                                        profiler.function_times[metric].extend(times)
+                                else:
+                                    # Log other messages
+                                    for message in messages:
+                                        summary_logger.log(level, message)
+                        else:
+                            summary_logger.add_organism_log(organism_id, logs)
+            else:
+                inference_results = {}
+        
+        if inference_results:
+            print(summary_logger.get_frame_log_summary())
+            pass
 
-        with profiler.profile_section("_update_snapshot_with_objects_sequential", "update_states"): 
-            state_changes = {}
-            for obj in objects:
-                state_changes[obj.id] = obj.update_state(self)
+        with profiler.profile_section("update_snapshot_with_objects", "get_organism_external_state_changes"):
+            organism_state_changes = {}
+            for organism in organisms:
+                action_index = inference_results.get(str(organism.id), -1)  # Use string representation of UUID
+                organism_state_changes[organism.id] = organism.get_external_state_change(action_index)
 
-        with profiler.profile_section("_update_snapshot_with_objects_sequential", "update_params"):
-            for obj in objects:
-                self.update_state_params(obj, obj.id)
+        with profiler.profile_section("update_snapshot_with_objects", "update_params_organisms"):
+            for organism in organisms:
+                self.update_state_params(organism, organism.id)
 
-        with profiler.profile_section("_update_snapshot_with_objects_sequential", "process_state_changes"):
-            for obj_id, change_dict in state_changes.items():
-                obj = next(o for o in objects if o.id == obj_id)
-                self.process_state_change_dict(obj_id, change_dict, obj, self.get_state(obj_id))
+        with profiler.profile_section("update_snapshot_with_objects", "update_params_items"):
+            for item in items:
+                self.update_state_params(item, item.id)
 
-    def batch_state_preparation(self, objects):
+        with profiler.profile_section("update_snapshot_with_objects", "process_state_changes_organisms"):
+            for org_id, change_dict in organism_state_changes.items():
+                organism = next(o for o in organisms if o.id == org_id)
+                self.process_state_change_dict(org_id, change_dict, organism, self.get_state(org_id))
+
+        with profiler.profile_section("update_snapshot_with_objects", "process_state_changes_items"):
+            for item_id, change_dict in item_state_changes.items():
+                item = next(i for i in items if i.id == item_id)
+                self.process_state_change_dict(item_id, change_dict, item, self.get_state(item_id))
+
+    def batch_state_preparation(self, organisms, items):
 
         # Get nearest items for organisms
-        organisms = [obj for obj in objects if obj.type == ObjectType.ORGANISM]
+        organisms = [obj for obj in organisms if obj.type == ObjectType.ORGANISM]
         for organism in organisms:
             org_state = self.get_state(organism.id)
             nearest_item_ids = self.sim_engine.get_nearest_items(
@@ -235,6 +254,7 @@ class StateSnapshot:
                 return_IDs=True
             )
             organism.nearest_item_ids = nearest_item_ids
+            organism.increment_frame()
 
     def process_state_change_dict(self, obj_id: UUID, change_dict: Dict[str, Any], obj: Any, obj_state: Dict[str, Any]):
         for key, value in change_dict.items():
@@ -314,3 +334,5 @@ class StateSnapshot:
                     collision_objects.append(obj)
         
         return collision_objects
+
+

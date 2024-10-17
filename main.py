@@ -5,7 +5,7 @@ import os
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Add project directories to the Python path
-project_dirs = ['gui', 'learner', 'shared', 'simulation']
+project_dirs = ['gui', 'inference', 'learning', 'shared', 'simulation']
 for dir_name in project_dirs:
     dir_path = os.path.join(base_dir, dir_name)
     if dir_path not in sys.path:
@@ -22,11 +22,16 @@ from shared.custom_profiler import profiler
 
 
 def main():
-    from learner.process_pool import ProcessPool
-    process_pool = ProcessPool(num_processes=4)
-    process_pool.start()
+    from learning.learner_process_pool import LearnerProcessPool
+    learner_process_pool = LearnerProcessPool(num_processes=2)
+    learner_process_pool.start()
+    
+    from inference.inference_process import InferenceProcess
+    inference_process = InferenceProcess()
+    inference_process.start()
+    
     ui = UI()
-    simulation_engine = SimulationEngine(ui, process_pool)
+    simulation_engine = SimulationEngine(ui, learner_process_pool, inference_process)
     sim_state = SimulationState(simulation_engine, ui)
     run_simulation(sim_state) # anything placed after this will execute after the simulation has finished
 
@@ -71,6 +76,9 @@ def run_simulation(sim_state):
             print_simulation_summary(sim_state, frame_times)
             last_print_time = current_time
             frame_times = []
+        
+        # Optionally print new logs every frame. Toggle from summary_logger.py
+        #print(summary_logger.get_frame_log_summary())
         
         if sim_state.ui.should_exit or sim_state.sim_engine.stop_simulation:
             event_loop.quit()
@@ -132,13 +140,18 @@ def print_simulation_summary(sim_state, frame_times):
     
     print(f"Avg frame time: {avg_frame_time*1000:.2f}ms (Max: {max_frame_time*1000:.2f}ms)")
     
-    # Print custom profiler stats
-    print("\nFunction Times:")
-    print(profiler.get_performance_stats())
+    # Print custom profiler stats if there are any
+    function_times = profiler.get_performance_stats()
+    if function_times:
+        print("\nFunction Times:")
+        print(function_times)
     
     # Print periodic summary for test organism
-    print("\n=== Logged Messages ===")
-    print(summary_logger.get_periodic_summary(sim_state.test_organism.id))
+    print(summary_logger.get_periodic_log_summary())
+    
+    # Print the size of the registration queue
+    registration_queue_size = sim_state.sim_engine.inference_process.registration_queue.qsize()
+    print(f"\nRegistration Queue Size: {registration_queue_size}")
     
     # Reset profiler stats
     profiler.reset_stats()
@@ -170,12 +183,13 @@ def print_final_summary(sim_state):
         overall_avg_total_frame_time = sum(sim_state.avg_total_frame_times) / len(sim_state.avg_total_frame_times)
         print(f"Overall average frame time: {overall_avg_total_frame_time*1000:.2f}ms (Max: {sim_state.max_frame_time*1000:.2f}ms)")
     
-    print("\n--- Network Statistics ---")
-    for stat in format_stats(sim_state.generate_network_stats()):
-        print(stat)
+    network_stats = sim_state.generate_network_stats()
+    if network_stats:
+        print("\n--- Network Statistics ---")
+        for stat in format_stats(network_stats):
+            print(stat)
     
-    print("\n=== Logged Messages ===")
-    print(summary_logger.get_summary())
+    print(summary_logger.get_final_log_summary())
 
 if __name__ == "__main__":
     main()

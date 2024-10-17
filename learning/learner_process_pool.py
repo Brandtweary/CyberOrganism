@@ -48,8 +48,14 @@ def _run_process(registration_queue, manager_dict):
             time.sleep(0.01)
 
 def _organism_thread(organism_id: str, components: Dict[str, Any], manager_dict: Dict[str, Any]):
-    import torch
-    import torch.nn.functional as F  # used in learn function
+    network_params = components['network_params']
+    learn_dependencies = network_params.get('learn_dependencies', [])
+    for module_name in learn_dependencies:
+        if '.' in module_name:
+            module, attribute = module_name.rsplit('.', 1)
+            globals()[attribute] = getattr(__import__(module, fromlist=[attribute]), attribute)
+        else:
+            globals()[module_name] = __import__(module_name)
 
     learn_input_queue = components['learn_input_queue']
     learn_output_queue = components['learn_output_queue']
@@ -65,12 +71,16 @@ def _organism_thread(organism_id: str, components: Dict[str, Any], manager_dict:
 
                 organism_state, experiences, training_steps = data
 
-                metrics, weights, td_errors = learn(
-                    organism_state=organism_state,
-                    experiences=experiences,
-                    training_steps=training_steps,
-                    architecture=architecture
-                )
+                try:
+                    metrics, weights, td_errors = learn(
+                        organism_state=organism_state,
+                        experiences=experiences,
+                        training_steps=training_steps,
+                        architecture=architecture
+                    )
+                except Exception as e:
+                    print(f"Error during learning: {e}")
+                    raise
 
                 learn_output_queue.put((metrics, weights, td_errors))
             else:
@@ -112,6 +122,8 @@ class LearnerProcessPool:
             process.start()
 
     def register_organism(self, organism_id: str, network_params: Dict[str, Any]):
+        if not isinstance(organism_id, str):
+            raise ValueError(f"Error: organism_id must be a string, got {type(organism_id).__name__}")
         min_count = min(len(p['organisms']) for p in self.processes.values())
         candidates = [idx for idx, p in self.processes.items() if len(p['organisms']) == min_count]
         process_index = random.choice(candidates)
@@ -133,11 +145,15 @@ class LearnerProcessPool:
         ))
 
     def get_organism_queues(self, organism_id: str):
+        if not isinstance(organism_id, str):
+            raise ValueError(f"Error: organism_id must be a string, got {type(organism_id).__name__}")
         learn_input_queue = self.organism_learn_input_queues.get(organism_id)
         learn_output_queue = self.organism_learn_output_queues.get(organism_id)
         return learn_input_queue, learn_output_queue
 
     def cleanup_organism(self, organism_id: str):
+        if not isinstance(organism_id, str):
+            raise ValueError(f"Error: organism_id must be a string, got {type(organism_id).__name__}")
         for process_data in self.processes.values():
             if organism_id in process_data['organisms']:
                 process_data['organisms'].remove(organism_id)
