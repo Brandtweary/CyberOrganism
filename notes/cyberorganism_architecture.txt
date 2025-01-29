@@ -1,4 +1,4 @@
-CyberOrganism is a TUI-based task and note management system built with prompt_toolkit. It provides a modal interface for creating, editing, and organizing tasks and notes with support for tagging and task completion.
+CyberOrganism is a text-based task and note management system built with prompt_toolkit. It provides a modal interface for creating, editing, and organizing tasks and notes with support for tagging and task completion.
 
 CyberOrganism Architecture
 
@@ -40,3 +40,9 @@ Task/Note Operations:
 - Editing: EDIT mode, select with up/down
 - Completion: COMPLETE mode or /complete <num>
 - Tagging: /tag <num> tag1 [[multi word]]
+
+Testing:
+- All tests: pytest -v
+- Single file: pytest tests/test_input_handling.py -v
+- Show output: pytest -v -s
+- Coverage: pytest --cov=src
