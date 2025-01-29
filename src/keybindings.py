@@ -102,8 +102,7 @@ def create_keybindings(app) -> KeyBindings:
         elif not isinstance(entry, Task):
             app.log_message("Cannot complete a note", 'warning')
         else:
-            entry.complete()
-            app.store._save()
+            app.store.complete_task(entry.id)
             app.log_message(f"Marked task {app.selected_index} as completed")
             app.input_buffer.reset()
             app.app.invalidate()
@@ -135,8 +134,8 @@ def create_keybindings(app) -> KeyBindings:
                 cleaned_text, tags = process_hashtags(text)
                 logger.debug(f"Cleaned text: {cleaned_text!r}, tags: {tags}")
                 task = Task(title=cleaned_text)
-                for tag in tags:
-                    task.add_tag(Tag(name=tag))
+                for tag in tags:  # tags are now Tag objects, so add them directly
+                    task.add_tag(tag)
                 logger.debug("Adding task to store")
                 app.store.add_task(task)
                 app.log_message(f"Added new task: {cleaned_text}")
@@ -144,8 +143,8 @@ def create_keybindings(app) -> KeyBindings:
                 logger.debug("Processing note creation")
                 cleaned_text, tags = process_hashtags(text)
                 note = Note(content=cleaned_text)
-                for tag in tags:
-                    note.add_tag(Tag(name=tag))
+                for tag in tags:  # tags are now Tag objects, so add them directly
+                    note.add_tag(tag)
                 app.store.add_note(note)
                 app.log_message(f"Added new note: {cleaned_text}")
             elif app.mode == app.InputMode.COMPLETE:
@@ -158,8 +157,7 @@ def create_keybindings(app) -> KeyBindings:
                         app.log_message("Invalid task number", 'warning')
                     else:
                         task = tasks[task_num]
-                        task.complete()
-                        app.store._save()
+                        app.store.complete_task(task.id)
                         app.log_message(f"Marked task {task_num} as completed")
                 except ValueError:
                     app.log_message("Please enter a valid task number", 'warning')
@@ -184,10 +182,7 @@ def create_keybindings(app) -> KeyBindings:
                     logger.debug("Ctrl+Enter detected")
                     if isinstance(entry, Task):
                         logger.debug("Completing task")
-                        entry.complete()
-                        app.store._save()
-                        app.log_message(f"Marked task {app.selected_index} as completed")
-                        app.input_buffer.reset()
+                        complete_selected_task()
                     return
 
                 # Handle normal edit mode
@@ -197,7 +192,7 @@ def create_keybindings(app) -> KeyBindings:
                     logger.debug("Creating new task in edit mode")
                     task = Task(title=cleaned_text)
                     for tag in tags:
-                        task.add_tag(Tag(name=tag))
+                        task.add_tag(tag)
                     app.store.add_task(task)
                     app.log_message(f"Added new task: {cleaned_text}")
                     app.input_buffer.reset()
@@ -207,14 +202,14 @@ def create_keybindings(app) -> KeyBindings:
                         entry.title = cleaned_text
                         entry.tags.clear()
                         for tag in tags:
-                            entry.add_tag(Tag(name=tag))
+                            entry.add_tag(tag)
                         app.log_message(f"Updated task {app.selected_index}")
                     else:  # Note
                         logger.debug("Updating existing note")
                         entry.content = cleaned_text
                         entry.tags.clear()
                         for tag in tags:
-                            entry.add_tag(Tag(name=tag))
+                            entry.add_tag(tag)
                         app.log_message(f"Updated note {app.selected_index}")
 
         # Only clear buffer if we're not in edit mode or if we just created a new task

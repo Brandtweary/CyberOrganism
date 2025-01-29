@@ -8,10 +8,8 @@ version = "0.1.0"
 description = "A tag-based task management TUI system"
 requires-python = ">=3.10"
 dependencies = [
-    "rich>=13.0.0",     # For beautiful terminal output
-    "pydantic>=2.0.0",  # For data validation
-    "prompt_toolkit>=3.0.0",  # For terminal input handling (to be removed after migration)
-    "textual>=0.52.1",  # For modern TUI framework
+    "prompt_toolkit>=3.0.0",  # For terminal input handling
+    "pynput==1.7.7",    # For input monitoring and control
 ]
 
 [project.optional-dependencies]

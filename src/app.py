@@ -17,8 +17,8 @@ class InputMode:
     COMPLETE = "COMPLETE"
 
 class CyberOrganism:
-    def __init__(self):
-        self.store = TaskStore()
+    def __init__(self, store=None):
+        self.store = store if store is not None else TaskStore()
         self.mode = InputMode.EDIT  # Start in edit mode
         self.command_mode = False
         self.running = True

@@ -10,13 +10,14 @@ COMMANDS = {
     "exit": "Exit the program"
 }
 
-def process_hashtags(text: str) -> tuple[str, set[str]]:
+def process_hashtags(text: str) -> tuple[str, set[Tag]]:
     """Extract hashtags from text and clean up the content.
     Returns (cleaned_text, set_of_tags)
     
-    Supports two tag formats:
+    Supports three tag formats:
     1. Simple tags: #tag
     2. Multi-word tags: #[[multi word tag]]
+    3. Property tags: #[[tag: value]]
     """
     tags = set()
     content_words = []
@@ -31,11 +32,19 @@ def process_hashtags(text: str) -> tuple[str, set[str]]:
     
     def replace_tag(match):
         nonlocal placeholder_counter
-        tag = match.group(1).strip()
-        if tag:  # Only add non-empty tags
-            tags.add(tag)
+        tag_content = match.group(1).strip()
+        if tag_content:  # Only process non-empty tags
+            # Check if it's a property tag (contains :)
+            if ':' in tag_content:
+                name, value = tag_content.split(':', 1)
+                name = name.strip()
+                value = value.strip()
+                if name:  # Only add if name is non-empty
+                    tags.add(Tag(name=name, value=value))
+            else:
+                tags.add(Tag(name=tag_content))
             placeholder = f"__TAG_PLACEHOLDER_{placeholder_counter}__"
-            placeholders[placeholder] = tag
+            placeholders[placeholder] = tag_content
             placeholder_counter += 1
             return placeholder
         return ""
@@ -53,7 +62,7 @@ def process_hashtags(text: str) -> tuple[str, set[str]]:
             # Remove the # but keep the word content, and add to tags
             tag = word[1:]
             if tag:  # Only add non-empty tags
-                tags.add(tag)
+                tags.add(Tag(name=tag))
                 # For inline tags, keep the tag content
                 content_words.append(tag)
         elif word in placeholders:
@@ -68,7 +77,7 @@ def process_hashtags(text: str) -> tuple[str, set[str]]:
         # If it's a hashtag at the end, treat it as a pure tag
         tag = last_word[1:]
         if tag:
-            tags.add(tag)
+            tags.add(Tag(name=tag))
     elif last_word in placeholders:
         # For a multi-word tag at the end, treat it as a pure tag
         # Don't add to content_words

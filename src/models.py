@@ -19,12 +19,21 @@ class Task:
     metadata: Dict[str, Any] = field(default_factory=dict)
     completed: bool = field(default=False)
     completed_at: Optional[datetime] = field(default=None)
+    recurring_days: Optional[int] = field(default=None)  # Number of days between recurrences
 
     def add_tag(self, tag: Tag) -> None:
+        # Check for special recurring tag format
+        if tag.name == "recurring" and tag.value is not None:
+            try:
+                self.recurring_days = int(tag.value)
+            except (ValueError, TypeError):
+                pass  # Invalid recurring value, ignore
         self.tags.add(tag)
 
     def remove_tag(self, tag_name: str) -> None:
         self.tags = {tag for tag in self.tags if tag.name != tag_name}
+        if tag_name == "recurring":
+            self.recurring_days = None
 
     def has_tag(self, tag_name: str) -> bool:
         return any(tag.name == tag_name for tag in self.tags)

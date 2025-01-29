@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Union
 from uuid import UUID
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .models import Task, Note, Tag
 
@@ -59,6 +59,7 @@ class TaskStore:
                 "title": item.title,
                 "description": item.description,
                 "completed": item.completed,
+                "recurring_days": item.recurring_days
             })
             if item.completed_at:
                 base_data["completed_at"] = item.completed_at.isoformat()
@@ -76,6 +77,7 @@ class TaskStore:
             created_at=datetime.fromisoformat(data["created_at"]),
             tags=tags,
             metadata=data.get("metadata", {}),
+            recurring_days=data.get("recurring_days")
         )
         # Load completed status
         if data.get("completed", False):
@@ -97,6 +99,29 @@ class TaskStore:
     def add_task(self, task: Task) -> None:
         self.tasks[task.id] = task
         self._save()
+
+    def handle_completed_task(self, task: Task) -> None:
+        """Handle task completion, creating a new recurring task if needed."""
+        if task.recurring_days is not None and task.completed_at is not None:
+            # Create a new recurring task
+            next_task = Task(
+                title=task.title,
+                description=task.description,
+                tags=task.tags,  # This will include the recurring tag
+                metadata=task.metadata.copy(),
+                recurring_days=task.recurring_days
+            )
+            # Set created_at to when the current task was completed plus recurring_days
+            next_task.created_at = task.completed_at + timedelta(days=task.recurring_days)
+            self.add_task(next_task)
+
+    def complete_task(self, task_id: UUID) -> None:
+        """Complete a task and handle recurring logic."""
+        if task_id in self.tasks:
+            task = self.tasks[task_id]
+            task.complete()
+            self.handle_completed_task(task)
+            self._save()
 
     def add_note(self, note: Note) -> None:
         self.notes[note.id] = note
