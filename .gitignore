@@ -1,3 +1,7 @@
+# CyberOrganism
+logs/
+cyberorganism.json
+
 # Python
 __pycache__/
 *.py[cod]
@@ -19,6 +23,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
 
 # Virtual Environment
 .venv/
