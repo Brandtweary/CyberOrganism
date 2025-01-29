@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+# Add the project root to the Python path
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
+
+from src.app import CyberOrganism
+
+if __name__ == "__main__":
+    app = CyberOrganism()
+    app.run()

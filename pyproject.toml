@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cyberorganism"
+version = "0.1.0"
+description = "A tag-based task management TUI system"
+requires-python = ">=3.10"
+dependencies = [
+    "rich>=13.0.0",     # For beautiful terminal output
+    "pydantic>=2.0.0",  # For data validation
+    "prompt_toolkit>=3.0.0",  # For terminal input handling (to be removed after migration)
+    "textual>=0.52.1",  # For modern TUI framework
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+cyberorganism = "cyberorganism:main"

@@ -1,0 +1,42 @@
+CyberOrganism is a TUI-based task and note management system built with prompt_toolkit. It provides a modal interface for creating, editing, and organizing tasks and notes with support for tagging and task completion.
+
+CyberOrganism Architecture
+
+Core Components:
+- app.py: Main application class (CyberOrganism) handling UI state, command processing
+  Key: handle_command(), get_taskpad_content()
+
+- models.py: Data models for tasks and notes
+  - Task: title, description, tags, completed status
+  - Note: content, tags
+  - Tag: name, value, schema
+
+- store.py: Data persistence layer using JSON
+  - TaskStore: Manages tasks/notes, handles save/load
+  Key: get_all_tasks(), add_task(), _save(), _load()
+
+- keybindings.py: Input handling
+  Key: handle_enter() - processes all input modes
+  Modes: TASK, NOTE, EDIT, COMPLETE, COMMAND
+
+- commands.py: Command processing
+  Commands: task, note, edit, complete, tag
+  Format: /command or command mode
+
+UI Flow:
+1. Input modes determine how text is processed
+2. Commands switch modes or perform actions
+3. Taskpad shows tasks/notes with indices
+4. Edit mode has special "NEW" slot at index 0
+
+Data Flow:
+1. Input -> keybindings.handle_enter
+2. Command/mode specific processing
+3. Updates stored in TaskStore
+4. UI refreshed via get_taskpad_content
+
+Task/Note Operations:
+- Creation: TASK/NOTE modes or EDIT index 0
+- Editing: EDIT mode, select with up/down
+- Completion: COMPLETE mode or /complete <num>
+- Tagging: /tag <num> tag1 [[multi word]]
